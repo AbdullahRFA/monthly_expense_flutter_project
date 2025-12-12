@@ -3,15 +3,13 @@ class UserModel {
   final String email;
   final String name;
 
-  // 1. CONSTANT CONSTRUCTOR
   const UserModel({
     required this.uid,
     required this.email,
     required this.name,
   });
 
-  // 2. TO MAP (Dart -> Database)
-  // We cannot send a 'Class' to Firebase. We must send a 'Map' (JSON).
+  // Convert to JSON for Firestore
   Map<String, dynamic> toMap() {
     return {
       'uid': uid,
@@ -20,8 +18,7 @@ class UserModel {
     };
   }
 
-  // 3. FROM MAP (Database -> Dart)
-  // When we read from Firebase, we get a Map. We need to convert it back to our Class.
+  // Create from JSON from Firestore
   factory UserModel.fromMap(Map<String, dynamic> map) {
     return UserModel(
       uid: map['uid'] ?? '',
