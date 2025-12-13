@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../auth/data/auth_repository.dart';
+import '../../providers/theme_provider.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -36,10 +37,18 @@ class SettingsScreen extends ConsumerWidget {
             title: const Text("Notifications"),
             trailing: Switch(value: true, onChanged: (val) {}), // Dummy switch
           ),
+          // ... inside the build method ListView ...
           ListTile(
             leading: const Icon(Icons.dark_mode),
             title: const Text("Dark Mode"),
-            trailing: Switch(value: false, onChanged: (val) {}), // Dummy switch
+            trailing: Switch(
+              // 1. Read value
+              value: ref.watch(themeProvider),
+              // 2. Update value
+              onChanged: (val) {
+                ref.read(themeProvider.notifier).state = val;
+              },
+            ),
           ),
 
           const Divider(),
@@ -55,6 +64,7 @@ class SettingsScreen extends ConsumerWidget {
               ref.read(authRepositoryProvider).signOut();
             },
           ),
+
         ],
       ),
     );
