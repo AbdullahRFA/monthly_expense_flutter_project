@@ -1,49 +1,79 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:monthly_expense_flutter_project/features/expenses/data/expense_repository.dart';
+import 'package:monthly_expense_flutter_project/features/expenses/domain/expense_model.dart';
 
 class AddExpenseDialog extends ConsumerStatefulWidget {
-  final String walletId; // We need to know WHICH wallet to charge
+  final String walletId;
+  final ExpenseModel? expenseToEdit;
 
-  const AddExpenseDialog({super.key, required this.walletId});
+  const AddExpenseDialog({super.key, required this.walletId, this.expenseToEdit});
 
   @override
   ConsumerState<AddExpenseDialog> createState() => _AddExpenseDialogState();
 }
 
 class _AddExpenseDialogState extends ConsumerState<AddExpenseDialog> {
-  final _titleController = TextEditingController();
-  final _amountController = TextEditingController();
+  late TextEditingController _titleController;
+  late TextEditingController _amountController;
   final _formKey = GlobalKey<FormState>();
 
-  // Default category
   String _selectedCategory = 'Food';
-
-  // Hardcoded categories for now (MVP)
   final List<String> _categories = ['Food', 'Transport', 'Bills', 'Shopping', 'Entertainment', 'Health'];
-
   bool _isLoading = false;
 
-  Future<void> _saveExpense() async {
-    if (!_formKey.currentState!.validate()) return;
+  @override
+  void initState() {
+    super.initState();
+    _titleController = TextEditingController(text: widget.expenseToEdit?.title ?? '');
+    _amountController = TextEditingController(text: widget.expenseToEdit?.amount.toString() ?? '');
+    if (widget.expenseToEdit != null) {
+      _selectedCategory = widget.expenseToEdit!.category;
+    }
+  }
 
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _amountController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
 
     try {
       final amount = double.parse(_amountController.text.trim());
+      final title = _titleController.text.trim();
 
-      // Call the Repository
-      await ref.read(expenseRepositoryProvider).addExpense(
-        walletId: widget.walletId,
-        title: _titleController.text.trim(),
-        amount: amount,
-        category: _selectedCategory,
-        date: DateTime.now(), // Default to Right Now
-        //   date: DateTime.now().subtract(const Duration(days: 1))
+      if (widget.expenseToEdit == null) {
+        // --- ADD MODE ---
+        await ref.read(expenseRepositoryProvider).addExpense(
+          walletId: widget.walletId,
+          title: title,
+          amount: amount,
+          category: _selectedCategory,
+          date: DateTime.now(),
+        );
+      } else {
+        // --- EDIT MODE ---
+        final newExpense = ExpenseModel(
+          id: widget.expenseToEdit!.id,
+          title: title,
+          amount: amount,
+          category: _selectedCategory,
+          date: widget.expenseToEdit!.date,
+        );
 
-      );
+        await ref.read(expenseRepositoryProvider).updateExpense(
+          walletId: widget.walletId,
+          oldExpense: widget.expenseToEdit!,
+          newExpense: newExpense,
+        );
+      }
 
-      if (mounted) Navigator.pop(context); // Close dialog
+      if (mounted) Navigator.pop(context);
 
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
@@ -54,23 +84,22 @@ class _AddExpenseDialogState extends ConsumerState<AddExpenseDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final isEditing = widget.expenseToEdit != null;
+
     return AlertDialog(
-      title: const Text("Add New Expense"),
+      title: Text(isEditing ? "Edit Expense" : "Add New Expense"),
       content: SingleChildScrollView(
         child: Form(
           key: _formKey,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Title
               TextFormField(
                 controller: _titleController,
-                decoration: const InputDecoration(labelText: "Item Name (e.g. Burger)"),
+                decoration: const InputDecoration(labelText: "Item Name"),
                 validator: (v) => v!.isEmpty ? "Required" : null,
               ),
               const SizedBox(height: 10),
-
-              // Amount
               TextFormField(
                 controller: _amountController,
                 decoration: const InputDecoration(labelText: "Amount"),
@@ -78,8 +107,6 @@ class _AddExpenseDialogState extends ConsumerState<AddExpenseDialog> {
                 validator: (v) => v!.isEmpty ? "Required" : null,
               ),
               const SizedBox(height: 10),
-
-              // Category Dropdown
               DropdownButtonFormField<String>(
                 value: _selectedCategory,
                 items: _categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
@@ -93,8 +120,8 @@ class _AddExpenseDialogState extends ConsumerState<AddExpenseDialog> {
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
         ElevatedButton(
-          onPressed: _isLoading ? null : _saveExpense,
-          child: _isLoading ? const CircularProgressIndicator() : const Text("Add"),
+          onPressed: _isLoading ? null : _save,
+          child: _isLoading ? const CircularProgressIndicator() : Text(isEditing ? "Update" : "Add"),
         ),
       ],
     );

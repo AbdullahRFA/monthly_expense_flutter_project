@@ -123,38 +123,72 @@ class WalletDetailScreen extends ConsumerWidget {
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // A. The Daily Header (e.g. "Today")
+                        // Header
                         Padding(
                           padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                           child: Text(
                             headerText,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 18,
-                              color: Colors.grey,
-                            ),
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.grey),
                           ),
                         ),
 
-                        // B. The List of Expenses for that day
+                        // Items List
                         ...dayExpenses.map((expense) {
-                          return Card(
-                            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                            elevation: 1, // Slight shadow looks nice
-                            child: ListTile(
-                              leading: CircleAvatar(
-                                backgroundColor: Colors.teal.shade100,
-                                child: Icon(_getIconForCategory(expense.category), color: Colors.teal),
-                              ),
-                              title: Text(expense.title),
-                              subtitle: Text(expense.category),
-                              trailing: Text(
-                                "-${CurrencyHelper.format(expense.amount)}",
-                                style: const TextStyle(
-                                  color: Colors.red,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 15,
+                          // --- NEW: DISMISSIBLE FOR DELETE ---
+                          return Dismissible(
+                            key: ValueKey(expense.id), // Unique key for animation
+                            direction: DismissDirection.endToStart, // Swipe Right to Left
+                            background: Container(
+                              color: Colors.red,
+                              alignment: Alignment.centerRight,
+                              padding: const EdgeInsets.only(right: 20),
+                              child: const Icon(Icons.delete, color: Colors.white),
+                            ),
+                            confirmDismiss: (direction) async {
+                              // Ask for confirmation
+                              return await showDialog(
+                                context: context,
+                                builder: (ctx) => AlertDialog(
+                                  title: const Text("Delete Expense?"),
+                                  content: const Text("Money will be refunded to your wallet."),
+                                  actions: [
+                                    TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Cancel")),
+                                    TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text("Delete", style: TextStyle(color: Colors.red))),
+                                  ],
                                 ),
+                              );
+                            },
+                            onDismissed: (direction) {
+                              // Execute Delete
+                              ref.read(expenseRepositoryProvider).deleteExpense(
+                                  walletId: wallet.id,
+                                  expenseId: expense.id,
+                                  amount: expense.amount
+                              );
+                            },
+                            child: Card(
+                              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                              child: ListTile(
+                                leading: CircleAvatar(
+                                  backgroundColor: Colors.teal.shade100,
+                                  child: Icon(_getIconForCategory(expense.category), color: Colors.teal),
+                                ),
+                                title: Text(expense.title),
+                                subtitle: Text(expense.category),
+                                trailing: Text(
+                                  "-${expense.amount}",
+                                  style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                                ),
+                                // --- NEW: LONG PRESS TO EDIT ---
+                                onLongPress: () {
+                                  showDialog(
+                                    context: context,
+                                    builder: (_) => AddExpenseDialog(
+                                      walletId: wallet.id,
+                                      expenseToEdit: expense, // Pass the item to edit
+                                    ),
+                                  );
+                                },
                               ),
                             ),
                           );

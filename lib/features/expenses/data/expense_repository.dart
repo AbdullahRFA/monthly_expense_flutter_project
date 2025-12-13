@@ -18,19 +18,15 @@ class ExpenseRepository {
     required String category,
     required DateTime date,
   }) async {
-    // We start a "Transaction". Firestore locks the wallet document while we work.
     return _firestore.runTransaction((transaction) async {
-      // A. Reference to the Wallet Document
       final walletRef = _firestore
           .collection('users')
           .doc(userId)
           .collection('wallets')
           .doc(walletId);
 
-      // B. Reference for the new Expense Document
       final expenseRef = walletRef.collection('expenses').doc();
 
-      // C. Read the current wallet data FIRST
       final walletSnapshot = await transaction.get(walletRef);
       if (!walletSnapshot.exists) {
         throw Exception("Wallet does not exist!");
@@ -38,7 +34,6 @@ class ExpenseRepository {
 
       final currentBalance = walletSnapshot.data()?['currentBalance'] ?? 0.0;
 
-      // D. Create the Expense Object
       final newExpense = ExpenseModel(
         id: expenseRef.id,
         title: title,
@@ -47,10 +42,8 @@ class ExpenseRepository {
         date: date,
       );
 
-      // E. WRITE 1: Save the Expense
       transaction.set(expenseRef, newExpense.toMap());
 
-      // F. WRITE 2: Update the Wallet Balance
       transaction.update(walletRef, {
         'currentBalance': currentBalance - amount,
       });
@@ -65,7 +58,7 @@ class ExpenseRepository {
         .collection('wallets')
         .doc(walletId)
         .collection('expenses')
-        .orderBy('date', descending: true) // Newest first
+        .orderBy('date', descending: true)
         .snapshots()
         .map((snapshot) {
       return snapshot.docs.map((doc) {
@@ -86,14 +79,39 @@ class ExpenseRepository {
 
       // Restore the money to the wallet
       transaction.update(walletRef, {
-        'currentBalance': FieldValue.increment(amount) // Atomic increment
+        'currentBalance': FieldValue.increment(amount)
       });
 
       // Delete the expense
       transaction.delete(expenseRef);
     });
   }
-}
+
+  // 4. EDIT EXPENSE (Transaction) -- MOVED INSIDE THE CLASS
+  Future<void> updateExpense({
+    required String walletId,
+    required ExpenseModel oldExpense,
+    required ExpenseModel newExpense,
+  }) async {
+    return _firestore.runTransaction((transaction) async {
+      final walletRef = _firestore.collection('users').doc(userId).collection('wallets').doc(walletId);
+      final expenseRef = walletRef.collection('expenses').doc(oldExpense.id);
+
+      // 1. Calculate the difference (Old - New)
+      final difference = oldExpense.amount - newExpense.amount;
+
+      // 2. Update the Expense Document
+      transaction.update(expenseRef, newExpense.toMap());
+
+      // 3. Update the Wallet Balance
+      if (difference != 0) {
+        transaction.update(walletRef, {
+          'currentBalance': FieldValue.increment(difference),
+        });
+      }
+    });
+  }
+} // <--- CLASS ENDS HERE
 
 // ---------------- PROVIDERS ----------------
 
@@ -106,7 +124,6 @@ final expenseRepositoryProvider = Provider<ExpenseRepository>((ref) {
   return ExpenseRepository(firestore, user.uid);
 });
 
-// We use 'family' because we need an input (walletId) to get the stream
 final expenseListProvider = StreamProvider.family<List<ExpenseModel>, String>((ref, walletId) {
   final repo = ref.watch(expenseRepositoryProvider);
   return repo.getExpenses(walletId);
