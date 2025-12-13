@@ -1,35 +1,50 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../data/wallet_repository.dart';
+import 'package:monthly_expense_flutter_project/features/wallet/data/wallet_repository.dart';
+import 'package:monthly_expense_flutter_project/features/wallet/domain/wallet_model.dart';
 
 class AddWalletDialog extends ConsumerStatefulWidget {
-  const AddWalletDialog({super.key});
+  final WalletModel? walletToEdit;
+
+  const AddWalletDialog({super.key, this.walletToEdit});
 
   @override
   ConsumerState<AddWalletDialog> createState() => _AddWalletDialogState();
 }
 
 class _AddWalletDialogState extends ConsumerState<AddWalletDialog> {
-  final _nameController = TextEditingController(text: "Main Wallet");
-  final _amountController = TextEditingController();
+  late TextEditingController _nameController;
+  late TextEditingController _amountController;
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
 
-  Future<void> _saveWallet() async {
-    if (!_formKey.currentState!.validate()) return;
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.walletToEdit?.name ?? 'Main Wallet');
+    _amountController = TextEditingController(text: widget.walletToEdit?.monthlyBudget.toString() ?? '');
+  }
 
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
 
     try {
       final budget = double.parse(_amountController.text.trim());
+      final name = _nameController.text.trim();
 
-      await ref.read(walletRepositoryProvider).addWallet(
-        name: _nameController.text.trim(),
-        monthlyBudget: budget,
-      );
-
-      if (mounted) Navigator.pop(context); // Close dialog on success
-
+      if (widget.walletToEdit == null) {
+        // ADD
+        await ref.read(walletRepositoryProvider).addWallet(name: name, monthlyBudget: budget);
+      } else {
+        // EDIT
+        await ref.read(walletRepositoryProvider).updateWallet(
+            oldWallet: widget.walletToEdit!,
+            newName: name,
+            newBudget: budget
+        );
+      }
+      if (mounted) Navigator.pop(context);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
     } finally {
@@ -40,35 +55,23 @@ class _AddWalletDialogState extends ConsumerState<AddWalletDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text("Create Monthly Wallet"),
+      title: Text(widget.walletToEdit == null ? "Create Wallet" : "Edit Wallet"),
       content: Form(
         key: _formKey,
         child: Column(
-          mainAxisSize: MainAxisSize.min, // Wrap content height
+          mainAxisSize: MainAxisSize.min,
           children: [
-            TextFormField(
-              controller: _nameController,
-              decoration: const InputDecoration(labelText: "Wallet Name"),
-              validator: (v) => v!.isEmpty ? "Required" : null,
-            ),
+            TextFormField(controller: _nameController, decoration: const InputDecoration(labelText: "Wallet Name")),
             const SizedBox(height: 10),
-            TextFormField(
-              controller: _amountController,
-              decoration: const InputDecoration(labelText: "Budget Amount (BDT)"),
-              keyboardType: TextInputType.number,
-              validator: (v) => v!.isEmpty ? "Required" : null,
-            ),
+            TextFormField(controller: _amountController, decoration: const InputDecoration(labelText: "Budget Amount")),
           ],
         ),
       ),
       actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text("Cancel"),
-        ),
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
         ElevatedButton(
-          onPressed: _isLoading ? null : _saveWallet,
-          child: _isLoading ? const CircularProgressIndicator() : const Text("Create"),
+          onPressed: _isLoading ? null : _save,
+          child: _isLoading ? const CircularProgressIndicator() : Text(widget.walletToEdit == null ? "Create" : "Update"),
         ),
       ],
     );

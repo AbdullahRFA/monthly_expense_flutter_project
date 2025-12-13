@@ -55,7 +55,7 @@ class WalletRepository {
     });
   }
 
-  // 3. GET SINGLE WALLET (Stream for Detail Screen - NEW)
+  // 3. GET SINGLE WALLET (Stream for Detail Screen)
   Stream<WalletModel> getWallet(String walletId) {
     return _firestore
         .collection('users')
@@ -70,7 +70,41 @@ class WalletRepository {
       return WalletModel.fromMap(doc.data() as Map<String, dynamic>);
     });
   }
-}
+
+  // 4. EDIT WALLET (With Balance Adjustment)
+  Future<void> updateWallet({
+    required WalletModel oldWallet,
+    required String newName,
+    required double newBudget,
+  }) async {
+    // 1. Calculate the difference (Did the user add money or remove money?)
+    // Example: Old Budget 1000, New Budget 2000. Diff = +1000.
+    final double difference = newBudget - oldWallet.monthlyBudget;
+
+    // 2. Update Firestore
+    await _firestore
+        .collection('users')
+        .doc(userId)
+        .collection('wallets')
+        .doc(oldWallet.id)
+        .update({
+      'name': newName,
+      'monthlyBudget': newBudget,
+      // 3. Atomically update the balance using the difference
+      'currentBalance': FieldValue.increment(difference),
+    });
+  }
+
+  // 5. DELETE WALLET (MOVED INSIDE CLASS)
+  Future<void> deleteWallet(String walletId) async {
+    await _firestore
+        .collection('users')
+        .doc(userId)
+        .collection('wallets')
+        .doc(walletId)
+        .delete();
+  }
+} // <--- CLASS ENDS HERE
 
 // ---------------- PROVIDERS ----------------
 
@@ -91,7 +125,7 @@ final walletListProvider = StreamProvider<List<WalletModel>>((ref) {
   return repository.getWallets();
 });
 
-// For Detail Screen Single Wallet (NEW)
+// For Detail Screen Single Wallet
 final walletStreamProvider = StreamProvider.family<WalletModel, String>((ref, walletId) {
   final repository = ref.watch(walletRepositoryProvider);
   return repository.getWallet(walletId);

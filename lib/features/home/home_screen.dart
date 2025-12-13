@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
-// CORRECTED IMPORTS: Using full package paths
+import 'package:monthly_expense_flutter_project/core/utils/currency_helper.dart';
 import 'package:monthly_expense_flutter_project/features/auth/data/auth_repository.dart';
+import 'package:monthly_expense_flutter_project/features/settings/presentation/settings_screen.dart';
 import 'package:monthly_expense_flutter_project/features/wallet/data/wallet_repository.dart';
 import 'package:monthly_expense_flutter_project/features/wallet/presentation/add_wallet_dialog.dart';
 import 'package:monthly_expense_flutter_project/features/wallet/presentation/wallet_detail_screen.dart';
 
-import '../../core/utils/currency_helper.dart';
-import 'package:monthly_expense_flutter_project/features/settings/presentation/settings_screen.dart';
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
@@ -20,17 +18,8 @@ class HomeScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text("My Wallets"),
-        actions: [
-          // IconButton(
-          //   icon: const Icon(Icons.logout),
-          //   onPressed: () {
-          //     // Read the repository and sign out
-          //     ref.read(authRepositoryProvider).signOut();
-          //   },
-          // ),
-        ],
       ),
-      // NEW: Add the Drawer
+      // SIDE DRAWER (Settings & Logout)
       drawer: Drawer(
         child: Column(
           children: [
@@ -51,7 +40,7 @@ class HomeScreen extends ConsumerWidget {
                 Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
               },
             ),
-            const Spacer(), // Pushes logout to bottom
+            const Spacer(),
             const Divider(),
             ListTile(
               leading: const Icon(Icons.logout, color: Colors.red),
@@ -86,16 +75,58 @@ class HomeScreen extends ConsumerWidget {
                 margin: const EdgeInsets.all(8),
                 child: ListTile(
                   title: Text(wallet.name),
-                  subtitle: Text("Budget: ${wallet.monthlyBudget}"),
-                  trailing: Text(
-                    "Bal: ${CurrencyHelper.format(wallet.currentBalance)}",
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.green,
-                      fontSize: 16,
-                    ),
+                  subtitle: Text("Budget: ${CurrencyHelper.format(wallet.monthlyBudget)}"),
+
+                  // --- THE 3-DOT MENU SECTION ---
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min, // Vital to prevent layout errors
+                    children: [
+                      // Balance Text
+                      Text(
+                        "Bal: ${CurrencyHelper.format(wallet.currentBalance)}",
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.green,
+                          fontSize: 14,
+                        ),
+                      ),
+
+                      // The Menu Button
+                      PopupMenuButton(
+                        icon: const Icon(Icons.more_vert), // The 3 dots icon
+                        onSelected: (value) {
+                          if (value == 'edit') {
+                            showDialog(
+                                context: context,
+                                builder: (_) => AddWalletDialog(walletToEdit: wallet)
+                            );
+                          } else if (value == 'delete') {
+                            showDialog(
+                              context: context,
+                              builder: (ctx) => AlertDialog(
+                                title: const Text("Delete Wallet?"),
+                                content: const Text("This cannot be undone."),
+                                actions: [
+                                  TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
+                                  TextButton(
+                                      onPressed: () {
+                                        ref.read(walletRepositoryProvider).deleteWallet(wallet.id);
+                                        Navigator.pop(ctx);
+                                      },
+                                      child: const Text("Delete", style: TextStyle(color: Colors.red))
+                                  ),
+                                ],
+                              ),
+                            );
+                          }
+                        },
+                        itemBuilder: (context) => [
+                          const PopupMenuItem(value: 'edit', child: Text("Edit")),
+                          const PopupMenuItem(value: 'delete', child: Text("Delete", style: TextStyle(color: Colors.red))),
+                        ],
+                      ),
+                    ],
                   ),
-                  // NEW: Add Navigation
                   onTap: () {
                     Navigator.push(
                       context,
@@ -110,23 +141,7 @@ class HomeScreen extends ConsumerWidget {
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-
-        // --- UPDATED ERROR HANDLING ---
-        error: (err, stack) {
-          // 1. This prints the error to your VS Code / Terminal Console
-          debugPrint("========================================");
-          debugPrint("ERROR LOADING WALLETS: $err");
-          debugPrint("STACK TRACE: $stack");
-          debugPrint("========================================");
-
-          // 2. This shows it on the screen
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Text("Error: $err", textAlign: TextAlign.center),
-            ),
-          );
-        },
+        error: (err, stack) => Center(child: Text("Error: $err")),
       ),
     );
   }
