@@ -8,7 +8,8 @@ import 'package:monthly_expense_flutter_project/core/utils/expense_grouper.dart'
 import 'package:monthly_expense_flutter_project/features/analytics/presentation/category_pie_chart.dart';
 import '../../../core/utils/currency_helper.dart';
 import 'package:monthly_expense_flutter_project/core/utils/pdf_helper.dart'; // Make sure this is PdfHelper now
-
+import 'package:monthly_expense_flutter_project/features/analytics/presentation/budget_summary_card.dart';
+import 'package:monthly_expense_flutter_project/features/analytics/presentation/spending_trend_chart.dart';
 class WalletDetailScreen extends ConsumerWidget {
   final WalletModel wallet;
 
@@ -32,17 +33,64 @@ class WalletDetailScreen extends ConsumerWidget {
             onPressed: () {
               final expensesState = ref.read(expenseListProvider(wallet.id));
               if (expensesState.hasValue) {
+                final allExpenses = expensesState.value!;
+
+                // Calculate Total Spent (Sum of all expenses)
+                // Note: We include everything to show "Net Spent" position vs Budget
+                final totalSpent = allExpenses.fold(0.0, (sum, item) => sum + item.amount);
+
                 showModalBottomSheet(
                   context: context,
-                  builder: (_) => Container(
-                    padding: const EdgeInsets.all(16),
-                    height: 400,
-                    child: Column(
-                      children: [
-                        const Text("Spending Breakdown", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 20),
-                        CategoryPieChart(expenses: expensesState.value!),
-                      ],
+                  isScrollControlled: true, // Allows sheet to be taller
+                  useSafeArea: true,
+                  shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+                  builder: (_) => DraggableScrollableSheet(
+                    expand: false,
+                    initialChildSize: 0.85, // Opens to 85% height
+                    maxChildSize: 0.95,
+                    minChildSize: 0.5,
+                    builder: (context, scrollController) => Container(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                      child: ListView( // Changed to ListView for scrolling
+                        controller: scrollController,
+                        children: [
+                          // Handle Bar
+                          Center(
+                            child: Container(
+                              width: 50, height: 5,
+                              margin: const EdgeInsets.only(bottom: 20),
+                              decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(10)),
+                            ),
+                          ),
+
+                          const Text("Analytics Dashboard", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.teal)),
+                          const SizedBox(height: 20),
+
+                          // 1. BUDGET SUMMARY CARD
+                          BudgetSummaryCard(
+                            monthlyBudget: wallet.monthlyBudget,
+                            totalSpent: totalSpent,
+                          ),
+                          const SizedBox(height: 20),
+
+                          // 2. TREND CHART
+                          SpendingTrendChart(expenses: allExpenses),
+                          const SizedBox(height: 20),
+
+                          // 3. CATEGORY PIE CHART
+                          const Text("Category Breakdown", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 10),
+                          Card(
+                            elevation: 4,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 20),
+                              child: CategoryPieChart(expenses: allExpenses),
+                            ),
+                          ),
+                          const SizedBox(height: 40), // Bottom padding
+                        ],
+                      ),
                     ),
                   ),
                 );
