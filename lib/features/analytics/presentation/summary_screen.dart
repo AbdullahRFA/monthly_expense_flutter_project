@@ -4,6 +4,7 @@ import '../../../core/utils/currency_helper.dart';
 import '../../../core/utils/expense_grouper.dart';
 import '../data/summary_repository.dart';
 import '../../expenses/domain/expense_model.dart';
+import '../../providers/theme_provider.dart'; // Import Theme Provider
 
 class SummaryScreen extends ConsumerWidget {
   const SummaryScreen({super.key});
@@ -12,14 +13,26 @@ class SummaryScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final globalExpensesAsync = ref.watch(globalExpensesProvider);
 
+    // 1. WATCH THEME STATE
+    final isDark = ref.watch(themeProvider);
+
+    // 2. DEFINE DYNAMIC COLORS
+    final bgColor = isDark ? const Color(0xFF121212) : Colors.grey[50];
+    final appBarColor = isDark ? const Color(0xFF1E1E1E) : Colors.teal;
+    final textColor = isDark ? Colors.white : Colors.white; // AppBar title is always white in this design
+    final tabBarBg = isDark ? const Color(0xFF2C2C2C) : Colors.teal.shade700;
+    final tabBarIndicator = isDark ? Colors.teal : Colors.white;
+    final tabBarLabel = isDark ? Colors.white : Colors.teal;
+    final tabBarUnselected = isDark ? Colors.grey : Colors.teal.shade100;
+
     return DefaultTabController(
       length: 2,
       child: Scaffold(
-        backgroundColor: Colors.grey[50], // Modern light background
+        backgroundColor: bgColor,
         appBar: AppBar(
-          title: const Text("Global Summary", style: TextStyle(fontWeight: FontWeight.bold)),
-          backgroundColor: Colors.teal,
-          foregroundColor: Colors.white,
+          title: Text("Global Summary", style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
+          backgroundColor: appBarColor,
+          foregroundColor: textColor,
           elevation: 0,
           bottom: PreferredSize(
             preferredSize: const Size.fromHeight(60),
@@ -27,16 +40,16 @@ class SummaryScreen extends ConsumerWidget {
               margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               height: 40,
               decoration: BoxDecoration(
-                color: Colors.teal.shade700,
+                color: tabBarBg,
                 borderRadius: BorderRadius.circular(20),
               ),
               child: TabBar(
                 indicator: BoxDecoration(
-                  color: Colors.white,
+                  color: tabBarIndicator,
                   borderRadius: BorderRadius.circular(20),
                 ),
-                labelColor: Colors.teal,
-                unselectedLabelColor: Colors.teal.shade100,
+                labelColor: tabBarLabel,
+                unselectedLabelColor: tabBarUnselected,
                 labelStyle: const TextStyle(fontWeight: FontWeight.bold),
                 tabs: const [
                   Tab(text: "Weekly Insights"),
@@ -49,7 +62,7 @@ class SummaryScreen extends ConsumerWidget {
         body: globalExpensesAsync.when(
           data: (expenses) {
             if (expenses.isEmpty) {
-              return _buildEmptyState();
+              return _buildEmptyState(isDark);
             }
             return TabBarView(
               children: [
@@ -59,38 +72,48 @@ class SummaryScreen extends ConsumerWidget {
             );
           },
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, s) => Center(child: Text("Error: $e")),
+          error: (e, s) => Center(child: Text("Error: $e", style: TextStyle(color: isDark ? Colors.white : Colors.black))),
         ),
       ),
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(bool isDark) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.bar_chart_rounded, size: 80, color: Colors.grey[300]),
+          Icon(Icons.bar_chart_rounded, size: 80, color: isDark ? Colors.grey[700] : Colors.grey[300]),
           const SizedBox(height: 16),
           Text(
             "No Data Yet",
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.grey[600]),
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: isDark ? Colors.grey[400] : Colors.grey[600]),
           ),
           const SizedBox(height: 8),
-          const Text("Start spending to see insights.", style: TextStyle(color: Colors.grey)),
+          Text("Start spending to see insights.", style: TextStyle(color: isDark ? Colors.grey[600] : Colors.grey)),
         ],
       ),
     );
   }
 }
 
-class _WeeklyView extends StatelessWidget {
+class _WeeklyView extends ConsumerWidget {
   final List<ExpenseModel> expenses;
 
   const _WeeklyView({required this.expenses});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isDark = ref.watch(themeProvider);
+
+    // Colors
+    final cardColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final subTextColor = isDark ? Colors.grey[400] : Colors.grey;
+    final shadowColor = isDark ? Colors.transparent : Colors.grey.shade200;
+    final dateBoxBg = isDark ? Colors.teal.withOpacity(0.2) : Colors.teal.shade50;
+    final progressBase = isDark ? Colors.grey[800] : Colors.grey[100];
+
     final grouped = ExpenseGrouper.groupExpensesByWeek(expenses);
     final sortedKeys = grouped.keys.toList()..sort();
 
@@ -119,10 +142,10 @@ class _WeeklyView extends StatelessWidget {
         return Container(
           margin: const EdgeInsets.only(bottom: 16),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: cardColor,
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
-              BoxShadow(color: Colors.grey.shade200, blurRadius: 10, offset: const Offset(0, 4)),
+              BoxShadow(color: shadowColor, blurRadius: 10, offset: const Offset(0, 4)),
             ],
           ),
           child: Padding(
@@ -133,12 +156,13 @@ class _WeeklyView extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
-                    color: Colors.teal.shade50,
+                    color: dateBoxBg,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Column(
                     children: [
-                      Text(week, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.teal)),
+                      const Text("Week", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal)),
+                      Text(week.replaceAll('W', ''), style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.teal.shade700)),
                       Text(year, style: TextStyle(fontSize: 10, color: Colors.teal.shade700)),
                     ],
                   ),
@@ -153,10 +177,10 @@ class _WeeklyView extends StatelessWidget {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text("Total Spent", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                          Text("Total Spent", style: TextStyle(color: subTextColor, fontSize: 12)),
                           Text(
                             CurrencyHelper.format(total),
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: textColor),
                           ),
                         ],
                       ),
@@ -166,7 +190,7 @@ class _WeeklyView extends StatelessWidget {
                         child: LinearProgressIndicator(
                           value: relativeParams,
                           minHeight: 6,
-                          backgroundColor: Colors.grey[100],
+                          backgroundColor: progressBase,
                           color: Colors.teal.withOpacity(0.7),
                         ),
                       ),
@@ -182,13 +206,21 @@ class _WeeklyView extends StatelessWidget {
   }
 }
 
-class _YearlyView extends StatelessWidget {
+class _YearlyView extends ConsumerWidget {
   final List<ExpenseModel> expenses;
 
   const _YearlyView({required this.expenses});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isDark = ref.watch(themeProvider);
+
+    // Colors
+    final cardColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final borderColor = isDark ? Colors.grey[800]! : Colors.grey.shade200;
+    final iconBg = isDark ? Colors.orange.withOpacity(0.15) : Colors.orange.shade50;
+
     final grouped = ExpenseGrouper.groupExpensesByYear(expenses);
     final sortedKeys = grouped.keys.toList()..sort();
     final lifetimeTotal = expenses.fold(0.0, (sum, e) => sum + e.amount);
@@ -201,8 +233,10 @@ class _YearlyView extends StatelessWidget {
           width: double.infinity,
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFF009688), Color(0xFF4DB6AC)],
+            gradient: LinearGradient(
+              colors: isDark
+                  ? [const Color(0xFF004D40), const Color(0xFF00695C)]
+                  : [const Color(0xFF009688), const Color(0xFF4DB6AC)],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
@@ -235,7 +269,7 @@ class _YearlyView extends StatelessWidget {
         ),
 
         const SizedBox(height: 24),
-        const Text("Yearly Breakdown", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
+        Text("Yearly Breakdown", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textColor)),
         const SizedBox(height: 12),
 
         // Yearly List
@@ -244,21 +278,21 @@ class _YearlyView extends StatelessWidget {
           return Container(
             margin: const EdgeInsets.only(bottom: 12),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: cardColor,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.grey.shade200),
+              border: Border.all(color: borderColor),
             ),
             child: ListTile(
               contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
               leading: Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Colors.orange.shade50,
+                  color: iconBg,
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(Icons.calendar_today_rounded, color: Colors.orange),
               ),
-              title: Text(year, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              title: Text(year, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textColor)),
               trailing: Text(
                 CurrencyHelper.format(total),
                 style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.teal),

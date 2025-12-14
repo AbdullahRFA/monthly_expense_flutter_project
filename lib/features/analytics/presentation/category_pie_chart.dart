@@ -1,17 +1,31 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/utils/analytics_helper.dart';
 import '../../../core/utils/currency_helper.dart';
 import '../../expenses/domain/expense_model.dart';
+import '../../providers/theme_provider.dart'; // Import Theme Provider
 
-class CategoryPieChart extends StatelessWidget {
+class CategoryPieChart extends ConsumerWidget {
   final List<ExpenseModel> expenses;
 
   const CategoryPieChart({super.key, required this.expenses});
 
   @override
-  Widget build(BuildContext context) {
-    // 1. Do the Math
+  Widget build(BuildContext context, WidgetRef ref) {
+    // 1. WATCH THEME STATE
+    final isDark = ref.watch(themeProvider);
+
+    // 2. DEFINE DYNAMIC COLORS
+    final cardColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final subTextColor = isDark ? Colors.grey[400] : Colors.grey[600];
+    final borderColor = isDark ? Colors.grey[800]! : Colors.grey.shade100;
+    final shadowColor = isDark ? Colors.transparent : Colors.grey.shade100;
+    final emptyIconColor = isDark ? Colors.grey[700] : Colors.grey[300];
+    final progressBaseColor = isDark ? Colors.grey[800] : Colors.grey[100];
+
+    // 3. Do the Math
     final categoryTotals = AnalyticsHelper.calculateCategoryTotals(expenses);
     final totalSpent = expenses.fold(0.0, (sum, item) => sum + item.amount);
 
@@ -22,9 +36,9 @@ class CategoryPieChart extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.pie_chart_outline, size: 48, color: Colors.grey[300]),
+              Icon(Icons.pie_chart_outline, size: 48, color: emptyIconColor),
               const SizedBox(height: 8),
-              Text("No expenses to chart", style: TextStyle(color: Colors.grey[500])),
+              Text("No expenses to chart", style: TextStyle(color: subTextColor)),
             ],
           ),
         ),
@@ -35,7 +49,7 @@ class CategoryPieChart extends StatelessWidget {
     final sortedEntries = categoryTotals.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
-    // 2. Prepare Chart Sections
+    // 4. Prepare Chart Sections
     final sections = sortedEntries.map((entry) {
       final category = entry.key;
       final amount = entry.value;
@@ -54,7 +68,7 @@ class CategoryPieChart extends StatelessWidget {
           color: Colors.white,
           shadows: [Shadow(color: Colors.black.withOpacity(0.2), blurRadius: 2)],
         ),
-        badgeWidget: _buildBadge(icon: Icons.star, size: 0, color: color), // Placeholder for future icons
+        badgeWidget: _buildBadge(icon: Icons.star, size: 0, color: color, isDark: isDark),
         badgePositionPercentageOffset: .98,
       );
     }).toList();
@@ -79,11 +93,11 @@ class CategoryPieChart extends StatelessWidget {
               Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text("Total Spent", style: TextStyle(fontSize: 12, color: Colors.grey[600], fontWeight: FontWeight.w500)),
+                  Text("Total Spent", style: TextStyle(fontSize: 12, color: subTextColor, fontWeight: FontWeight.w500)),
                   const SizedBox(height: 4),
                   Text(
                     CurrencyHelper.format(totalSpent),
-                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87),
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: textColor),
                   ),
                 ],
               )
@@ -109,11 +123,11 @@ class CategoryPieChart extends StatelessWidget {
             return Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: cardColor,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.shade100),
+                border: Border.all(color: borderColor),
                 boxShadow: [
-                  BoxShadow(color: Colors.grey.shade100, blurRadius: 4, offset: const Offset(0, 2)),
+                  BoxShadow(color: shadowColor, blurRadius: 4, offset: const Offset(0, 2)),
                 ],
               ),
               child: Row(
@@ -134,7 +148,7 @@ class CategoryPieChart extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(category, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                        Text(category, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: textColor)),
                         const SizedBox(height: 4),
                         // Mini Progress Bar
                         ClipRRect(
@@ -142,7 +156,7 @@ class CategoryPieChart extends StatelessWidget {
                           child: LinearProgressIndicator(
                             value: percentage,
                             minHeight: 4,
-                            backgroundColor: Colors.grey[100],
+                            backgroundColor: progressBaseColor,
                             color: color.withOpacity(0.6),
                           ),
                         ),
@@ -158,11 +172,11 @@ class CategoryPieChart extends StatelessWidget {
                     children: [
                       Text(
                         CurrencyHelper.format(amount),
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: textColor),
                       ),
                       Text(
                         "${(percentage * 100).toStringAsFixed(1)}%",
-                        style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                        style: TextStyle(color: subTextColor, fontSize: 12),
                       ),
                     ],
                   ),
@@ -176,12 +190,12 @@ class CategoryPieChart extends StatelessWidget {
   }
 
   // Placeholder helper if we ever want to add icons to badges
-  Widget _buildBadge({required IconData icon, required double size, required Color color}) {
+  Widget _buildBadge({required IconData icon, required double size, required Color color, required bool isDark}) {
     if (size == 0) return const SizedBox.shrink();
     return Container(
       padding: EdgeInsets.all(size * 0.2),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
         shape: BoxShape.circle,
         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 2)],
       ),

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/utils/currency_helper.dart';
+import '../../providers/theme_provider.dart'; // Import Theme Provider
 
-class BudgetSummaryCard extends StatelessWidget {
+class BudgetSummaryCard extends ConsumerWidget {
   final double monthlyBudget;
   final double totalSpent;
 
@@ -12,7 +14,17 @@ class BudgetSummaryCard extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // 1. WATCH THEME STATE
+    final isDark = ref.watch(themeProvider);
+
+    // 2. DEFINE DYNAMIC COLORS
+    final cardColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final subTextColor = isDark ? Colors.grey[400] : Colors.grey[600];
+    final shadowColor = isDark ? Colors.transparent : Colors.grey.shade200;
+    final progressBarBase = isDark ? Colors.grey[800] : Colors.grey[100];
+
     // Logic
     final double remaining = monthlyBudget - totalSpent;
     final double progress = (monthlyBudget == 0) ? 0 : (totalSpent / monthlyBudget);
@@ -31,10 +43,10 @@ class BudgetSummaryCard extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: cardColor,
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
-          BoxShadow(color: Colors.grey.shade200, blurRadius: 15, offset: const Offset(0, 5)),
+          BoxShadow(color: shadowColor, blurRadius: 15, offset: const Offset(0, 5)),
         ],
       ),
       padding: const EdgeInsets.all(24),
@@ -47,7 +59,7 @@ class BudgetSummaryCard extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text("Budget Usage", style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+                  Text("Budget Usage", style: TextStyle(color: subTextColor, fontSize: 14)),
                   const SizedBox(height: 4),
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.baseline,
@@ -63,7 +75,7 @@ class BudgetSummaryCard extends StatelessWidget {
                       ),
                       Text(
                         " used",
-                        style: TextStyle(fontSize: 14, color: Colors.grey[500], fontWeight: FontWeight.bold),
+                        style: TextStyle(fontSize: 14, color: subTextColor, fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
@@ -72,7 +84,7 @@ class BudgetSummaryCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.1),
+                  color: statusColor.withOpacity(isDark ? 0.2 : 0.1),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
@@ -93,7 +105,7 @@ class BudgetSummaryCard extends StatelessWidget {
                 height: 16,
                 width: double.infinity,
                 decoration: BoxDecoration(
-                  color: Colors.grey[100],
+                  color: progressBarBase,
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
@@ -127,8 +139,9 @@ class BudgetSummaryCard extends StatelessWidget {
                   label: "Limit",
                   amount: monthlyBudget,
                   icon: Icons.account_balance_wallet_outlined,
-                  color: Colors.grey.shade700,
-                  bgColor: Colors.grey.shade50,
+                  color: isDark ? Colors.grey[300]! : Colors.grey.shade700,
+                  bgColor: isDark ? const Color(0xFF2C2C2C) : Colors.grey.shade50,
+                  subTextColor: subTextColor!,
                 ),
               ),
               const SizedBox(width: 12),
@@ -138,7 +151,8 @@ class BudgetSummaryCard extends StatelessWidget {
                   amount: totalSpent,
                   icon: Icons.shopping_bag_outlined,
                   color: Colors.orange.shade800,
-                  bgColor: Colors.orange.shade50,
+                  bgColor: isDark ? Colors.orange.withOpacity(0.15) : Colors.orange.shade50,
+                  subTextColor: subTextColor,
                 ),
               ),
               const SizedBox(width: 12),
@@ -148,7 +162,10 @@ class BudgetSummaryCard extends StatelessWidget {
                   amount: remaining,
                   icon: Icons.savings_outlined,
                   color: remaining < 0 ? Colors.red : Colors.green,
-                  bgColor: remaining < 0 ? Colors.red.shade50 : Colors.green.shade50,
+                  bgColor: remaining < 0
+                      ? (isDark ? Colors.red.withOpacity(0.15) : Colors.red.shade50)
+                      : (isDark ? Colors.green.withOpacity(0.15) : Colors.green.shade50),
+                  subTextColor: subTextColor,
                 ),
               ),
             ],
@@ -160,9 +177,9 @@ class BudgetSummaryCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: Colors.red.shade50,
+                color: isDark ? Colors.red.withOpacity(0.15) : Colors.red.shade50,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.red.shade100),
+                border: Border.all(color: isDark ? Colors.red.withOpacity(0.3) : Colors.red.shade100),
               ),
               child: Row(
                 children: [
@@ -171,7 +188,7 @@ class BudgetSummaryCard extends StatelessWidget {
                   Expanded(
                     child: Text(
                       "You exceeded your budget by ${CurrencyHelper.format(totalSpent - monthlyBudget)}",
-                      style: TextStyle(color: Colors.red.shade900, fontWeight: FontWeight.w600, fontSize: 13),
+                      style: TextStyle(color: isDark ? Colors.red.shade200 : Colors.red.shade900, fontWeight: FontWeight.w600, fontSize: 13),
                     ),
                   ),
                 ],
@@ -190,6 +207,7 @@ class _StatBox extends StatelessWidget {
   final IconData icon;
   final Color color;
   final Color bgColor;
+  final Color subTextColor;
 
   const _StatBox({
     required this.label,
@@ -197,6 +215,7 @@ class _StatBox extends StatelessWidget {
     required this.icon,
     required this.color,
     required this.bgColor,
+    required this.subTextColor,
   });
 
   @override
@@ -211,7 +230,7 @@ class _StatBox extends StatelessWidget {
         children: [
           Icon(icon, size: 20, color: color.withOpacity(0.8)),
           const SizedBox(height: 8),
-          Text(label, style: TextStyle(color: Colors.grey[600], fontSize: 11, fontWeight: FontWeight.w500)),
+          Text(label, style: TextStyle(color: subTextColor, fontSize: 11, fontWeight: FontWeight.w500)),
           const SizedBox(height: 4),
           FittedBox(
             fit: BoxFit.scaleDown,
