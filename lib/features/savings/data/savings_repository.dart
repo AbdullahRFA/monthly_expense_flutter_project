@@ -66,9 +66,33 @@ class SavingsRepository {
     });
   }
 
-  // 4. DELETE GOAL
-  Future<void> deleteGoal(String goalId) async {
-    await _firestore.collection('users').doc(userId).collection('savings_goals').doc(goalId).delete();
+  // 4. DELETE GOAL (With Refund Logic)
+  Future<void> deleteGoal({required String goalId, String? refundWalletId}) async {
+    return _firestore.runTransaction((transaction) async {
+      final goalRef = _firestore.collection('users').doc(userId).collection('savings_goals').doc(goalId);
+
+      // 1. Read the goal to see how much money is in it
+      final goalSnapshot = await transaction.get(goalRef);
+      if (!goalSnapshot.exists) return; // Already deleted
+
+      final double savedAmount = (goalSnapshot.data()?['currentSaved'] ?? 0).toDouble();
+
+      // 2. If there is money AND a wallet selected, refund it
+      if (savedAmount > 0 && refundWalletId != null) {
+        final walletRef = _firestore.collection('users').doc(userId).collection('wallets').doc(refundWalletId);
+
+        // Check if wallet exists before trying to update (Safety)
+        final walletSnapshot = await transaction.get(walletRef);
+        if (walletSnapshot.exists) {
+          transaction.update(walletRef, {
+            'currentBalance': FieldValue.increment(savedAmount),
+          });
+        }
+      }
+
+      // 3. Delete the goal
+      transaction.delete(goalRef);
+    });
   }
 }
 
