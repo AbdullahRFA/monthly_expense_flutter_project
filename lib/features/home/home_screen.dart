@@ -1,7 +1,11 @@
+import 'dart:convert'; // For Web Base64
+import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb; // Web Check
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:monthly_expense_flutter_project/core/utils/currency_helper.dart';
+import 'package:monthly_expense_flutter_project/core/utils/profile_image_helper.dart'; // Import this
 import 'package:monthly_expense_flutter_project/features/auth/data/auth_repository.dart';
 import 'package:monthly_expense_flutter_project/features/settings/presentation/settings_screen.dart';
 import 'package:monthly_expense_flutter_project/features/wallet/data/wallet_repository.dart';
@@ -66,6 +70,20 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
+  // Helper to get Image Provider (Web vs Mobile)
+  ImageProvider? _getImageProvider(String? path) {
+    if (path == null) return null;
+    if (kIsWeb) {
+      try {
+        return MemoryImage(base64Decode(path));
+      } catch (e) {
+        return null;
+      }
+    } else {
+      return FileImage(File(path));
+    }
+  }
+
   // --- 1. GROUPING LOGIC ---
   Widget _buildGroupedWalletList(
       BuildContext context,
@@ -75,7 +93,6 @@ class HomeScreen extends ConsumerWidget {
       Color textColor,
       Color? subTextColor
       ) {
-    // Helper to generate group keys
     String getGroupKey(WalletModel wallet) {
       final now = DateTime.now();
       if (wallet.year == now.year && wallet.month == now.month) {
@@ -88,7 +105,6 @@ class HomeScreen extends ConsumerWidget {
       }
     }
 
-    // Organize wallets into a Map
     final Map<String, List<WalletModel>> grouped = {};
     for (var wallet in wallets) {
       final key = getGroupKey(wallet);
@@ -99,7 +115,7 @@ class HomeScreen extends ConsumerWidget {
     final groupKeys = grouped.keys.toList();
 
     return ListView.builder(
-      padding: const EdgeInsets.only(bottom: 80), // Space for FAB
+      padding: const EdgeInsets.only(bottom: 80),
       itemCount: groupKeys.length,
       itemBuilder: (context, index) {
         final key = groupKeys[index];
@@ -108,7 +124,6 @@ class HomeScreen extends ConsumerWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Section Header
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
               child: Text(
@@ -121,7 +136,6 @@ class HomeScreen extends ConsumerWidget {
                 ),
               ),
             ),
-            // Wallet Cards
             ...groupWallets.map((wallet) => _WalletCard(wallet: wallet, ref: ref, isDark: isDark)),
           ],
         );
@@ -150,26 +164,47 @@ class HomeScreen extends ConsumerWidget {
   Widget _buildDrawer(BuildContext context, WidgetRef ref, bool isDark) {
     final drawerBg = isDark ? const Color(0xFF1E1E1E) : Colors.white;
     final textColor = isDark ? Colors.white : Colors.black87;
+    final user = ref.read(authRepositoryProvider).currentUser;
 
     return Drawer(
       backgroundColor: drawerBg,
       child: Column(
         children: [
-          UserAccountsDrawerHeader(
-            decoration: const BoxDecoration(
-              color: Colors.teal,
-              image: DecorationImage(
-                image: NetworkImage("https://www.transparenttextures.com/patterns/cubes.png"), // Subtle pattern
-                fit: BoxFit.cover,
-                opacity: 0.1,
-              ),
-            ),
-            accountName: const Text("Monthly Expense", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-            accountEmail: const Text("Track your wealth"),
-            currentAccountPicture: const CircleAvatar(
-              backgroundColor: Colors.white,
-              child: Icon(Icons.account_balance_wallet, color: Colors.teal, size: 35),
-            ),
+          // Use FutureBuilder to load image async when drawer opens
+          FutureBuilder<String?>(
+            future: ProfileImageHelper.getImagePath(),
+            builder: (context, snapshot) {
+              final imagePath = snapshot.data;
+              final imageProvider = _getImageProvider(imagePath);
+
+              return UserAccountsDrawerHeader(
+                decoration: const BoxDecoration(
+                  color: Colors.teal,
+                  image: DecorationImage(
+                    image: NetworkImage("https://www.transparenttextures.com/patterns/cubes.png"),
+                    fit: BoxFit.cover,
+                    opacity: 0.1,
+                  ),
+                ),
+                accountName: Text(
+                  user?.displayName ?? "Monthly Expense",
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                accountEmail: Text(user?.email ?? "Track your wealth"),
+                currentAccountPicture: CircleAvatar(
+                  backgroundColor: Colors.white,
+                  backgroundImage: imageProvider,
+                  // Safely handle errors if file is missing/corrupt
+                  onBackgroundImageError: imageProvider != null ? (_, __) {} : null,
+                  child: imageProvider == null
+                      ? Text(
+                    (user?.email ?? "U").substring(0, 1).toUpperCase(),
+                    style: const TextStyle(fontSize: 35, fontWeight: FontWeight.bold, color: Colors.teal),
+                  )
+                      : null,
+                ),
+              );
+            },
           ),
           ListTile(
             leading: const Icon(Icons.savings, color: Colors.green),
@@ -191,9 +226,10 @@ class HomeScreen extends ConsumerWidget {
           ListTile(
             leading: Icon(Icons.settings, color: textColor),
             title: Text("Settings", style: TextStyle(color: textColor)),
-            onTap: () {
+            onTap: () async {
               Navigator.pop(context);
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
+              // Wait for settings to close to refresh drawer if needed (though FutureBuilder handles it on rebuild)
+              await Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
             },
           ),
           const Spacer(),
@@ -212,7 +248,8 @@ class HomeScreen extends ConsumerWidget {
   }
 }
 
-// --- 2. MODERN WALLET CARD (THEME AWARE) ---
+// ... _WalletCard remains unchanged ...
+// (Include the _WalletCard class here exactly as it was in the previous file content provided in context)
 class _WalletCard extends StatelessWidget {
   final WalletModel wallet;
   final WidgetRef ref;
