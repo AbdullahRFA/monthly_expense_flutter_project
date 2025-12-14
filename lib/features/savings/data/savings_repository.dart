@@ -30,42 +30,44 @@ class SavingsRepository {
     await docRef.set(goal.toMap());
   }
 
-  // 2. DEPOSIT MONEY
+  // 2. DEPOSIT MONEY (Offline Compatible)
   Future<void> depositToGoal({
     required String walletId,
     required String goalId,
     required String goalTitle,
     required double amount,
   }) async {
-    return _firestore.runTransaction((transaction) async {
-      final walletRef = _firestore.collection('users').doc(userId).collection('wallets').doc(walletId);
-      final goalRef = _firestore.collection('users').doc(userId).collection('savings_goals').doc(goalId);
-      final expenseRef = walletRef.collection('expenses').doc();
+    final batch = _firestore.batch();
 
-      final walletSnapshot = await transaction.get(walletRef);
-      final currentBalance = walletSnapshot.data()?['currentBalance'] ?? 0.0;
+    final walletRef = _firestore.collection('users').doc(userId).collection('wallets').doc(walletId);
+    final goalRef = _firestore.collection('users').doc(userId).collection('savings_goals').doc(goalId);
+    final expenseRef = walletRef.collection('expenses').doc();
 
-      if (currentBalance < amount) {
-        throw Exception("Insufficient funds in wallet!");
-      }
+    // OPTIONAL: You can try to read balance here to validate funds.
+    // In strict offline mode, if you want to be safe, you might skip validation or rely on cached data.
+    // Here we proceed optimistically.
 
-      transaction.update(walletRef, {
-        'currentBalance': FieldValue.increment(-amount),
-      });
-
-      transaction.update(goalRef, {
-        'currentSaved': FieldValue.increment(amount),
-      });
-
-      final depositExpense = ExpenseModel(
-        id: expenseRef.id,
-        title: "Deposit: $goalTitle",
-        amount: amount,
-        category: "Savings",
-        date: DateTime.now(),
-      );
-      transaction.set(expenseRef, depositExpense.toMap());
+    // Deduct from Wallet
+    batch.update(walletRef, {
+      'currentBalance': FieldValue.increment(-amount),
     });
+
+    // Add to Goal
+    batch.update(goalRef, {
+      'currentSaved': FieldValue.increment(amount),
+    });
+
+    // Record Transaction
+    final depositExpense = ExpenseModel(
+      id: expenseRef.id,
+      title: "Deposit: $goalTitle",
+      amount: amount,
+      category: "Savings",
+      date: DateTime.now(),
+    );
+    batch.set(expenseRef, depositExpense.toMap());
+
+    await batch.commit();
   }
 
   // 3. GET GOALS
@@ -75,45 +77,47 @@ class SavingsRepository {
     });
   }
 
-  // 4. DELETE GOAL
+  // 4. DELETE GOAL (Offline Compatible)
   Future<void> deleteGoal({required String goalId, String? refundWalletId}) async {
-    return _firestore.runTransaction((transaction) async {
-      final goalRef = _firestore.collection('users').doc(userId).collection('savings_goals').doc(goalId);
+    // Note: Deleting requires knowing the current 'savedAmount' to refund it.
+    // We must read the document first.
+    final goalRef = _firestore.collection('users').doc(userId).collection('savings_goals').doc(goalId);
 
-      final goalSnapshot = await transaction.get(goalRef);
-      if (!goalSnapshot.exists) return;
+    // Attempt to read (will look in cache first if offline)
+    final goalSnapshot = await goalRef.get();
 
-      final double savedAmount = (goalSnapshot.data()?['currentSaved'] ?? 0).toDouble();
-      final String goalTitle = goalSnapshot.data()?['title'] ?? 'Goal';
+    if (!goalSnapshot.exists) return;
 
-      if (savedAmount > 0 && refundWalletId != null) {
-        final walletRef = _firestore.collection('users').doc(userId).collection('wallets').doc(refundWalletId);
-        final expenseRef = walletRef.collection('expenses').doc();
+    final batch = _firestore.batch();
+    final double savedAmount = (goalSnapshot.data()?['currentSaved'] ?? 0).toDouble();
+    final String goalTitle = goalSnapshot.data()?['title'] ?? 'Goal';
 
-        transaction.update(walletRef, {
-          'currentBalance': FieldValue.increment(savedAmount),
-        });
+    if (savedAmount > 0 && refundWalletId != null) {
+      final walletRef = _firestore.collection('users').doc(userId).collection('wallets').doc(refundWalletId);
+      final expenseRef = walletRef.collection('expenses').doc();
 
-        final refundExpense = ExpenseModel(
-          id: expenseRef.id,
-          title: "Refund: $goalTitle",
-          amount: -savedAmount,
-          category: "Savings",
-          date: DateTime.now(),
-        );
-        transaction.set(expenseRef, refundExpense.toMap());
-      }
+      batch.update(walletRef, {
+        'currentBalance': FieldValue.increment(savedAmount),
+      });
 
-      transaction.delete(goalRef);
-    });
+      final refundExpense = ExpenseModel(
+        id: expenseRef.id,
+        title: "Refund: $goalTitle",
+        amount: -savedAmount,
+        category: "Savings",
+        date: DateTime.now(),
+      );
+      batch.set(expenseRef, refundExpense.toMap());
+    }
+
+    batch.delete(goalRef);
+    await batch.commit();
   }
 }
 
 // PROVIDERS
 final savingsRepositoryProvider = Provider<SavingsRepository>((ref) {
   final firestore = ref.read(firebaseFirestoreProvider);
-
-  // FIX: Watch authStateProvider
   final authState = ref.watch(authStateProvider);
   final user = authState.value;
 

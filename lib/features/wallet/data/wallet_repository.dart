@@ -11,7 +11,7 @@ class WalletRepository {
 
   WalletRepository(this._firestore, this.userId);
 
-  // 1. CREATE WALLET (With Smart Rollover Transaction)
+  // 1. CREATE WALLET (Offline Compatible using Batch)
   Future<void> addWallet({
     required String name,
     required double monthlyBudget,
@@ -19,57 +19,61 @@ class WalletRepository {
     String? sourceWalletId,
     String? sourceWalletName,
   }) async {
-    return _firestore.runTransaction((transaction) async {
-      final userRef = _firestore.collection('users').doc(userId);
-      final newWalletRef = userRef.collection('wallets').doc();
-      final now = DateTime.now();
+    // Use Batch instead of Transaction for offline support
+    final batch = _firestore.batch();
 
-      // --- STEP 1: HANDLE SOURCE WALLET ---
-      if (sourceWalletId != null && rolloverAmount > 0) {
-        final sourceWalletRef = userRef.collection('wallets').doc(sourceWalletId);
-        final sourceExpenseRef = sourceWalletRef.collection('expenses').doc();
+    final userRef = _firestore.collection('users').doc(userId);
+    final newWalletRef = userRef.collection('wallets').doc();
+    final now = DateTime.now();
 
-        final sourceSnapshot = await transaction.get(sourceWalletRef);
-        if (sourceSnapshot.exists) {
-          transaction.update(sourceWalletRef, {
-            'currentBalance': FieldValue.increment(-rolloverAmount),
-          });
+    // --- STEP 1: HANDLE SOURCE WALLET ---
+    if (sourceWalletId != null && rolloverAmount > 0) {
+      final sourceWalletRef = userRef.collection('wallets').doc(sourceWalletId);
+      final sourceExpenseRef = sourceWalletRef.collection('expenses').doc();
 
-          final deductionRecord = ExpenseModel(
-            id: sourceExpenseRef.id,
-            title: "Rollover to $name",
-            amount: rolloverAmount,
-            category: "Others",
-            date: now,
-          );
-          transaction.set(sourceExpenseRef, deductionRecord.toMap());
-        }
-      }
+      // Decrement balance using FieldValue (safe for offline)
+      batch.update(sourceWalletRef, {
+        'currentBalance': FieldValue.increment(-rolloverAmount),
+      });
 
-      // --- STEP 2: HANDLE NEW WALLET ---
-      final newWallet = WalletModel(
-        id: newWalletRef.id,
-        name: name,
-        monthlyBudget: monthlyBudget,
-        currentBalance: monthlyBudget + rolloverAmount,
-        month: now.month,
-        year: now.year,
+      final deductionRecord = ExpenseModel(
+        id: sourceExpenseRef.id,
+        title: "Rollover to $name",
+        amount: rolloverAmount,
+        category: "Others",
+        date: now,
       );
-      transaction.set(newWalletRef, newWallet.toMap());
+      batch.set(sourceExpenseRef, deductionRecord.toMap());
+    }
 
-      if (sourceWalletName != null && rolloverAmount > 0) {
-        final newExpenseRef = newWalletRef.collection('expenses').doc();
+    // --- STEP 2: HANDLE NEW WALLET ---
+    final newWallet = WalletModel(
+      id: newWalletRef.id,
+      name: name,
+      monthlyBudget: monthlyBudget,
+      currentBalance: monthlyBudget + rolloverAmount,
+      month: now.month,
+      year: now.year,
+    );
+    batch.set(newWalletRef, newWallet.toMap());
 
-        final incomeRecord = ExpenseModel(
-          id: newExpenseRef.id,
-          title: "Rollover from $sourceWalletName",
-          amount: -rolloverAmount,
-          category: "Others",
-          date: now,
-        );
-        transaction.set(newExpenseRef, incomeRecord.toMap());
-      }
-    });
+    if (sourceWalletName != null && rolloverAmount > 0) {
+      final newExpenseRef = newWalletRef.collection('expenses').doc();
+
+      final incomeRecord = ExpenseModel(
+        id: newExpenseRef.id,
+        title: "Rollover from $sourceWalletName",
+        amount: -rolloverAmount, // Negative amount usually implies income in your logic?
+        // Or if you track positive expenses, this logically adds funds.
+        // Based on previous logic, let's keep consistency.
+        category: "Others",
+        date: now,
+      );
+      batch.set(newExpenseRef, incomeRecord.toMap());
+    }
+
+    // Commit all changes locally (and sync when online)
+    await batch.commit();
   }
 
   // 2. GET ALL WALLETS
@@ -80,7 +84,7 @@ class WalletRepository {
         .collection('wallets')
         .orderBy('year', descending: true)
         .orderBy('month', descending: true)
-        .snapshots()
+        .snapshots() // snapshots() works offline automatically
         .map((snapshot) {
       return snapshot.docs.map((doc) {
         return WalletModel.fromMap(doc.data());
@@ -139,9 +143,6 @@ class WalletRepository {
 
 final walletRepositoryProvider = Provider<WalletRepository>((ref) {
   final firestore = ref.read(firebaseFirestoreProvider);
-
-  // FIX: Watch authStateProvider instead of reading currentUser once.
-  // This forces the provider to REBUILD whenever the user logs in/out.
   final authState = ref.watch(authStateProvider);
   final user = authState.value;
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // Import Firestore
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'features/providers/theme_provider.dart';
 import 'firebase_options.dart';
@@ -12,6 +13,14 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
+  // ENABLE OFFLINE PERSISTENCE
+  // This allows the app to work without internet by caching data locally.
+  FirebaseFirestore.instance.settings = const Settings(
+    persistenceEnabled: true,
+    cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+  );
+
   runApp(const ProviderScope(child: MyApp()));
 }
 

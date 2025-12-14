@@ -10,7 +10,7 @@ class ExpenseRepository {
 
   ExpenseRepository(this._firestore, this.userId);
 
-  // 1. ADD EXPENSE
+  // 1. ADD EXPENSE (Offline Compatible)
   Future<void> addExpense({
     required String walletId,
     required String title,
@@ -18,36 +18,33 @@ class ExpenseRepository {
     required String category,
     required DateTime date,
   }) async {
-    return _firestore.runTransaction((transaction) async {
-      final walletRef = _firestore
-          .collection('users')
-          .doc(userId)
-          .collection('wallets')
-          .doc(walletId);
+    final batch = _firestore.batch();
 
-      final expenseRef = walletRef.collection('expenses').doc();
+    final walletRef = _firestore
+        .collection('users')
+        .doc(userId)
+        .collection('wallets')
+        .doc(walletId);
 
-      final walletSnapshot = await transaction.get(walletRef);
-      if (!walletSnapshot.exists) {
-        throw Exception("Wallet does not exist!");
-      }
+    final expenseRef = walletRef.collection('expenses').doc();
 
-      final currentBalance = walletSnapshot.data()?['currentBalance'] ?? 0.0;
+    final newExpense = ExpenseModel(
+      id: expenseRef.id,
+      title: title,
+      amount: amount,
+      category: category,
+      date: date,
+    );
 
-      final newExpense = ExpenseModel(
-        id: expenseRef.id,
-        title: title,
-        amount: amount,
-        category: category,
-        date: date,
-      );
+    // Write Expense
+    batch.set(expenseRef, newExpense.toMap());
 
-      transaction.set(expenseRef, newExpense.toMap());
-
-      transaction.update(walletRef, {
-        'currentBalance': currentBalance - amount,
-      });
+    // Update Balance Atomically (Works Offline)
+    batch.update(walletRef, {
+      'currentBalance': FieldValue.increment(-amount),
     });
+
+    await batch.commit();
   }
 
   // 2. GET EXPENSES
@@ -67,44 +64,52 @@ class ExpenseRepository {
     });
   }
 
-  // 3. DELETE EXPENSE
+  // 3. DELETE EXPENSE (Offline Compatible)
   Future<void> deleteExpense({
     required String walletId,
     required String expenseId,
     required double amount
   }) async {
-    return _firestore.runTransaction((transaction) async {
-      final walletRef = _firestore.collection('users').doc(userId).collection('wallets').doc(walletId);
-      final expenseRef = walletRef.collection('expenses').doc(expenseId);
+    final batch = _firestore.batch();
 
-      transaction.update(walletRef, {
-        'currentBalance': FieldValue.increment(amount)
-      });
+    final walletRef = _firestore.collection('users').doc(userId).collection('wallets').doc(walletId);
+    final expenseRef = walletRef.collection('expenses').doc(expenseId);
 
-      transaction.delete(expenseRef);
+    // Restore Balance
+    batch.update(walletRef, {
+      'currentBalance': FieldValue.increment(amount)
     });
+
+    // Delete Expense
+    batch.delete(expenseRef);
+
+    await batch.commit();
   }
 
-  // 4. EDIT EXPENSE
+  // 4. EDIT EXPENSE (Offline Compatible)
   Future<void> updateExpense({
     required String walletId,
     required ExpenseModel oldExpense,
     required ExpenseModel newExpense,
   }) async {
-    return _firestore.runTransaction((transaction) async {
-      final walletRef = _firestore.collection('users').doc(userId).collection('wallets').doc(walletId);
-      final expenseRef = walletRef.collection('expenses').doc(oldExpense.id);
+    final batch = _firestore.batch();
 
-      final difference = oldExpense.amount - newExpense.amount;
+    final walletRef = _firestore.collection('users').doc(userId).collection('wallets').doc(walletId);
+    final expenseRef = walletRef.collection('expenses').doc(oldExpense.id);
 
-      transaction.update(expenseRef, newExpense.toMap());
+    final difference = oldExpense.amount - newExpense.amount;
 
-      if (difference != 0) {
-        transaction.update(walletRef, {
-          'currentBalance': FieldValue.increment(difference),
-        });
-      }
-    });
+    // Update Expense Doc
+    batch.update(expenseRef, newExpense.toMap());
+
+    // Adjust Balance if amount changed
+    if (difference != 0) {
+      batch.update(walletRef, {
+        'currentBalance': FieldValue.increment(difference),
+      });
+    }
+
+    await batch.commit();
   }
 }
 
@@ -112,8 +117,6 @@ class ExpenseRepository {
 
 final expenseRepositoryProvider = Provider<ExpenseRepository>((ref) {
   final firestore = ref.read(firebaseFirestoreProvider);
-
-  // FIX: Watch authStateProvider
   final authState = ref.watch(authStateProvider);
   final user = authState.value;
 
