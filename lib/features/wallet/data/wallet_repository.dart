@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../domain/wallet_model.dart';
 import '../../auth/data/auth_repository.dart';
+import '../../expenses/domain/expense_model.dart'; // Import Expense Model
 
 class WalletRepository {
   final FirebaseFirestore _firestore;
@@ -10,36 +11,76 @@ class WalletRepository {
 
   WalletRepository(this._firestore, this.userId);
 
-  // 1. CREATE WALLET
+  // 1. CREATE WALLET (With Smart Rollover Transaction)
   Future<void> addWallet({
     required String name,
     required double monthlyBudget,
+    double rolloverAmount = 0.0,
+    String? sourceWalletId,   // ID of the old wallet
+    String? sourceWalletName, // Name of the old wallet
   }) async {
-    try {
-      final docRef = _firestore
-          .collection('users')
-          .doc(userId)
-          .collection('wallets')
-          .doc();
-
+    // We use a Transaction to ensure both wallets update together, or fail together.
+    return _firestore.runTransaction((transaction) async {
+      final userRef = _firestore.collection('users').doc(userId);
+      final newWalletRef = userRef.collection('wallets').doc();
       final now = DateTime.now();
 
+      // --- STEP 1: HANDLE SOURCE WALLET (The Old One) ---
+      if (sourceWalletId != null && rolloverAmount > 0) {
+        final sourceWalletRef = userRef.collection('wallets').doc(sourceWalletId);
+        final sourceExpenseRef = sourceWalletRef.collection('expenses').doc();
+
+        // Check if source wallet still exists
+        final sourceSnapshot = await transaction.get(sourceWalletRef);
+        if (sourceSnapshot.exists) {
+          // A. Deduct Money from Old Wallet
+          transaction.update(sourceWalletRef, {
+            'currentBalance': FieldValue.increment(-rolloverAmount),
+          });
+
+          // B. Add "Expense" Record to Old Wallet
+          final deductionRecord = ExpenseModel(
+            id: sourceExpenseRef.id,
+            title: "Rollover to $name", // "Rollover to November"
+            amount: rolloverAmount,
+            category: "Others",
+            date: now,
+          );
+          transaction.set(sourceExpenseRef, deductionRecord.toMap());
+        }
+      }
+
+      // --- STEP 2: HANDLE NEW WALLET (The Destination) ---
+
+      // A. Create the New Wallet
+      // Starting Balance = Budget + Rollover
       final newWallet = WalletModel(
-        id: docRef.id,
+        id: newWalletRef.id,
         name: name,
         monthlyBudget: monthlyBudget,
-        currentBalance: monthlyBudget,
+        currentBalance: monthlyBudget + rolloverAmount,
         month: now.month,
         year: now.year,
       );
+      transaction.set(newWalletRef, newWallet.toMap());
 
-      await docRef.set(newWallet.toMap());
-    } catch (e) {
-      throw Exception("Failed to add wallet: $e");
-    }
+      // B. Add "Income" Record to New Wallet (Only if there was a rollover)
+      if (sourceWalletName != null && rolloverAmount > 0) {
+        final newExpenseRef = newWalletRef.collection('expenses').doc();
+
+        final incomeRecord = ExpenseModel(
+          id: newExpenseRef.id,
+          title: "Rollover from $sourceWalletName", // "Rollover from October"
+          amount: -rolloverAmount, // Negative = Income (Green)
+          category: "Others",
+          date: now,
+        );
+        transaction.set(newExpenseRef, incomeRecord.toMap());
+      }
+    });
   }
 
-  // 2. GET ALL WALLETS (Stream for Home Screen)
+  // 2. GET ALL WALLETS
   Stream<List<WalletModel>> getWallets() {
     return _firestore
         .collection('users')
@@ -55,7 +96,7 @@ class WalletRepository {
     });
   }
 
-  // 3. GET SINGLE WALLET (Stream for Detail Screen)
+  // 3. GET SINGLE WALLET
   Stream<WalletModel> getWallet(String walletId) {
     return _firestore
         .collection('users')
@@ -71,17 +112,14 @@ class WalletRepository {
     });
   }
 
-  // 4. EDIT WALLET (With Balance Adjustment)
+  // 4. EDIT WALLET
   Future<void> updateWallet({
     required WalletModel oldWallet,
     required String newName,
     required double newBudget,
   }) async {
-    // 1. Calculate the difference (Did the user add money or remove money?)
-    // Example: Old Budget 1000, New Budget 2000. Diff = +1000.
     final double difference = newBudget - oldWallet.monthlyBudget;
 
-    // 2. Update Firestore
     await _firestore
         .collection('users')
         .doc(userId)
@@ -90,12 +128,11 @@ class WalletRepository {
         .update({
       'name': newName,
       'monthlyBudget': newBudget,
-      // 3. Atomically update the balance using the difference
       'currentBalance': FieldValue.increment(difference),
     });
   }
 
-  // 5. DELETE WALLET (MOVED INSIDE CLASS)
+  // 5. DELETE WALLET
   Future<void> deleteWallet(String walletId) async {
     await _firestore
         .collection('users')
@@ -104,7 +141,7 @@ class WalletRepository {
         .doc(walletId)
         .delete();
   }
-} // <--- CLASS ENDS HERE
+}
 
 // ---------------- PROVIDERS ----------------
 
@@ -119,13 +156,11 @@ final walletRepositoryProvider = Provider<WalletRepository>((ref) {
   return WalletRepository(firestore, user.uid);
 });
 
-// For Home Screen List
 final walletListProvider = StreamProvider<List<WalletModel>>((ref) {
   final repository = ref.watch(walletRepositoryProvider);
   return repository.getWallets();
 });
 
-// For Detail Screen Single Wallet
 final walletStreamProvider = StreamProvider.family<WalletModel, String>((ref, walletId) {
   final repository = ref.watch(walletRepositoryProvider);
   return repository.getWallet(walletId);
