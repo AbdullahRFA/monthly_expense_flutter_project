@@ -1,42 +1,61 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:monthly_expense_flutter_project/core/utils/profile_image_helper.dart';
+import 'package:monthly_expense_flutter_project/features/settings/presentation/edit_profile_screen.dart'; // Import new screen
 import '../../auth/data/auth_repository.dart';
 import '../../providers/theme_provider.dart';
 
-class SettingsScreen extends ConsumerWidget {
+class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final user = ref.read(authRepositoryProvider).currentUser;
+  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
+}
 
-    // 1. WATCH THEME STATE
+class _SettingsScreenState extends ConsumerState<SettingsScreen> {
+  String? _profileImagePath;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProfileImage();
+  }
+
+  // Load image from SharedPreferences
+  Future<void> _loadProfileImage() async {
+    final path = await ProfileImageHelper.getImagePath();
+    if (mounted) {
+      setState(() {
+        _profileImagePath = path;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final user = ref.read(authRepositoryProvider).currentUser;
     final isDark = ref.watch(themeProvider);
 
-    // 2. DEFINE DYNAMIC COLORS
-    // Backgrounds
+    // Dynamic Colors
     final bgColor = isDark ? const Color(0xFF121212) : Colors.grey[50];
     final cardColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
-
-    // Text
     final textColor = isDark ? Colors.white : Colors.black87;
     final subtitleColor = isDark ? Colors.grey[400] : Colors.grey[600];
-
-    // Shadows (Lighter or removed in dark mode)
     final shadowColor = isDark ? Colors.transparent : Colors.grey.shade100;
 
     return Scaffold(
-      backgroundColor: bgColor, // <--- Dynamic
+      backgroundColor: bgColor,
       appBar: AppBar(
         title: const Text("Settings", style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: cardColor, // <--- Dynamic
-        foregroundColor: textColor, // <--- Dynamic
+        backgroundColor: cardColor,
+        foregroundColor: textColor,
         elevation: 0,
       ),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          // 1. Profile Card
+          // 1. Profile Card (Updated)
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
@@ -52,13 +71,19 @@ class SettingsScreen extends ConsumerWidget {
             ),
             child: Row(
               children: [
+                // Profile Picture Logic
                 CircleAvatar(
                   radius: 30,
                   backgroundColor: Colors.white,
-                  child: Text(
+                  backgroundImage: _profileImagePath != null
+                      ? FileImage(File(_profileImagePath!))
+                      : null,
+                  child: _profileImagePath == null
+                      ? Text(
                     (user?.email ?? "U").substring(0, 1).toUpperCase(),
                     style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.teal.shade700),
-                  ),
+                  )
+                      : null,
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -77,21 +102,38 @@ class SettingsScreen extends ConsumerWidget {
                     ],
                   ),
                 ),
+                // Edit Button
+                IconButton(
+                  icon: const Icon(Icons.edit, color: Colors.white),
+                  onPressed: () async {
+                    // Navigate to Edit Screen and wait for result
+                    await Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const EditProfileScreen())
+                    );
+                    // Refresh data when coming back
+                    await user?.reload();
+                    _loadProfileImage();
+                    setState(() {}); // Rebuild to show new name
+                  },
+                )
               ],
             ),
           ),
 
           const SizedBox(height: 30),
 
-          // 2. Preferences Section
+          // ... (Rest of your existing tiles: Preferences, Account, etc.)
+          // Reuse your existing _buildTile logic here...
+
+          // PREFERENCES
           Padding(
             padding: const EdgeInsets.only(left: 8, bottom: 10),
             child: Text("PREFERENCES", style: TextStyle(color: subtitleColor, fontWeight: FontWeight.bold, fontSize: 12)),
           ),
-
           Container(
             decoration: BoxDecoration(
-              color: cardColor, // <--- Dynamic
+              color: cardColor,
               borderRadius: BorderRadius.circular(16),
               boxShadow: [BoxShadow(color: shadowColor, blurRadius: 5)],
             ),
@@ -102,23 +144,9 @@ class SettingsScreen extends ConsumerWidget {
                   color: Colors.orange,
                   title: "Currency",
                   subtitle: "Bangladesh Taka (৳)",
-                  textColor: textColor,      // <--- Pass colors
-                  subtitleColor: subtitleColor,
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Currency selection coming soon!")));
-                  },
-                ),
-                Divider(height: 1, indent: 60, color: isDark ? Colors.grey[800] : Colors.grey[200]),
-                _buildTile(
-                  icon: Icons.notifications_rounded,
-                  color: Colors.blue,
-                  title: "Notifications",
                   textColor: textColor,
-                  trailing: Switch.adaptive(
-                    value: true,
-                    onChanged: (val) {},
-                    activeColor: Colors.teal,
-                  ),
+                  subtitleColor: subtitleColor,
+                  onTap: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Coming soon!"))),
                 ),
                 Divider(height: 1, indent: 60, color: isDark ? Colors.grey[800] : Colors.grey[200]),
                 _buildTile(
@@ -128,7 +156,6 @@ class SettingsScreen extends ConsumerWidget {
                   textColor: textColor,
                   trailing: Switch.adaptive(
                     value: isDark,
-                    // The toggle itself works, and now the colors will react to it!
                     onChanged: (val) => ref.read(themeProvider.notifier).state = val,
                     activeColor: Colors.teal,
                   ),
@@ -139,46 +166,37 @@ class SettingsScreen extends ConsumerWidget {
 
           const SizedBox(height: 30),
 
-          // 3. Account Section
+          // ACCOUNT
           Padding(
             padding: const EdgeInsets.only(left: 8, bottom: 10),
             child: Text("ACCOUNT", style: TextStyle(color: subtitleColor, fontWeight: FontWeight.bold, fontSize: 12)),
           ),
-
           Container(
             decoration: BoxDecoration(
-              color: cardColor, // <--- Dynamic
+              color: cardColor,
               borderRadius: BorderRadius.circular(16),
               boxShadow: [BoxShadow(color: shadowColor, blurRadius: 5)],
             ),
             child: Column(
               children: [
                 _buildTile(
-                  icon: Icons.info_outline_rounded,
-                  color: Colors.grey,
-                  title: "About App",
-                  textColor: textColor,
-                  onTap: () {
-                    showAboutDialog(context: context, applicationName: "Monthly Expense", applicationVersion: "1.0.0");
-                  },
-                ),
-                Divider(height: 1, indent: 60, color: isDark ? Colors.grey[800] : Colors.grey[200]),
-                _buildTile(
                   icon: Icons.logout_rounded,
                   color: Colors.red,
                   title: "Logout",
-                  textColor: Colors.red, // Logout is always red
+                  textColor: Colors.red,
                   onTap: () {
                     showDialog(
                       context: context,
                       builder: (ctx) => AlertDialog(
-                        backgroundColor: cardColor, // Dynamic Dialog
+                        backgroundColor: cardColor,
                         title: Text("Logout?", style: TextStyle(color: textColor)),
-                        content: Text("Are you sure you want to exit?", style: TextStyle(color: textColor)),
+                        content: Text("Are you sure?", style: TextStyle(color: textColor)),
                         actions: [
                           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
                           TextButton(
                             onPressed: () {
+                              // Clear image cache on logout so next user doesn't see it
+                              ProfileImageHelper.clearImage();
                               Navigator.pop(ctx);
                               Navigator.pop(context);
                               ref.read(authRepositoryProvider).signOut();
@@ -193,23 +211,19 @@ class SettingsScreen extends ConsumerWidget {
               ],
             ),
           ),
-
-          const SizedBox(height: 40),
-          Center(
-            child: Text("Version 1.0.0", style: TextStyle(color: subtitleColor, fontSize: 12)),
-          ),
         ],
       ),
     );
   }
 
+  // Helper Widget (Same as before)
   Widget _buildTile({
     required IconData icon,
     required Color color,
     required String title,
-    required Color textColor, // Add this
+    required Color textColor,
     String? subtitle,
-    Color? subtitleColor,     // Add this
+    Color? subtitleColor,
     Widget? trailing,
     VoidCallback? onTap,
   }) {
@@ -217,10 +231,7 @@ class SettingsScreen extends ConsumerWidget {
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       leading: Container(
         padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          shape: BoxShape.circle,
-        ),
+        decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
         child: Icon(icon, color: color, size: 22),
       ),
       title: Text(title, style: TextStyle(fontWeight: FontWeight.w600, color: textColor)),
