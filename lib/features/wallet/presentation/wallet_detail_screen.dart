@@ -8,8 +8,8 @@ import 'package:monthly_expense_flutter_project/features/expenses/presentation/a
 import 'package:monthly_expense_flutter_project/core/utils/expense_grouper.dart';
 import 'package:monthly_expense_flutter_project/features/analytics/presentation/category_pie_chart.dart';
 import '../../../core/utils/currency_helper.dart';
-import 'package:monthly_expense_flutter_project/core/utils/csv_helper.dart';
-
+// import 'package:monthly_expense_flutter_project/core/utils/csv_helper.dart';
+import 'package:monthly_expense_flutter_project/core/utils/pdf_helper.dart';
 class WalletDetailScreen extends ConsumerWidget {
   final WalletModel wallet;
 
@@ -52,30 +52,61 @@ class WalletDetailScreen extends ConsumerWidget {
           ),
 
           // --- EXPORT CSV BUTTON (FIXED) ---
+          // IconButton(
+          //   icon: const Icon(Icons.download),
+          //   tooltip: "Export CSV",
+          //   onPressed: () async { // <--- 1. Marked ASYNC
+          //     final expensesState = ref.read(expenseListProvider(wallet.id));
+          //
+          //     if (expensesState.hasValue && expensesState.value!.isNotEmpty) {
+          //       try {
+          //         // <--- 2. Try to Export
+          //         await CsvHelper.exportExpenses(expensesState.value!);
+          //
+          //         if (context.mounted) {
+          //           ScaffoldMessenger.of(context).showSnackBar(
+          //             const SnackBar(content: Text("Export successful!"), backgroundColor: Colors.green),
+          //           );
+          //         }
+          //       } catch (e, stack) {
+          //         // <--- 3. CATCH & PRINT ERROR
+          //         debugPrint("CSV EXPORT ERROR: $e");
+          //         debugPrint(stack.toString());
+          //
+          //         if (context.mounted) {
+          //           ScaffoldMessenger.of(context).showSnackBar(
+          //             SnackBar(content: Text("Export Failed: $e"), backgroundColor: Colors.red),
+          //           );
+          //         }
+          //       }
+          //     } else {
+          //       ScaffoldMessenger.of(context).showSnackBar(
+          //         const SnackBar(content: Text("No expenses to export!")),
+          //       );
+          //     }
+          //   },
+          // ),
+
+          // ... inside AppBar actions ...
+
+          // PDF EXPORT BUTTON
           IconButton(
-            icon: const Icon(Icons.download),
-            tooltip: "Export CSV",
-            onPressed: () async { // <--- 1. Marked ASYNC
+            icon: const Icon(Icons.picture_as_pdf), // Changed Icon
+            tooltip: "Export PDF",
+            onPressed: () async {
               final expensesState = ref.read(expenseListProvider(wallet.id));
 
               if (expensesState.hasValue && expensesState.value!.isNotEmpty) {
                 try {
-                  // <--- 2. Try to Export
-                  await CsvHelper.exportExpenses(expensesState.value!);
+                  // Call the new PDF Helper
+                  // We pass the list AND the wallet name for the report title
+                  await PdfHelper.generateAndPrint(expensesState.value!, wallet.name);
 
+                } catch (e) {
+                  debugPrint("PDF ERROR: $e");
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("Export successful!"), backgroundColor: Colors.green),
-                    );
-                  }
-                } catch (e, stack) {
-                  // <--- 3. CATCH & PRINT ERROR
-                  debugPrint("CSV EXPORT ERROR: $e");
-                  debugPrint(stack.toString());
-
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text("Export Failed: $e"), backgroundColor: Colors.red),
+                      SnackBar(content: Text("PDF Error: $e"), backgroundColor: Colors.red),
                     );
                   }
                 }
