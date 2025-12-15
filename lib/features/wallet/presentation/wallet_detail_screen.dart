@@ -22,6 +22,9 @@ class WalletDetailScreen extends ConsumerWidget {
     final expensesAsync = ref.watch(expenseListProvider(wallet.id));
     final walletAsync = ref.watch(walletStreamProvider(wallet.id));
 
+    // Get the latest wallet data (real-time balance)
+    final currentWallet = walletAsync.value ?? wallet;
+
     // 1. Theme Data
     final isDark = ref.watch(themeProvider);
     final bgColor = isDark ? const Color(0xFF121212) : Colors.grey[50];
@@ -29,50 +32,53 @@ class WalletDetailScreen extends ConsumerWidget {
     final textColor = isDark ? Colors.white : Colors.black87;
     final subTextColor = isDark ? Colors.grey[400] : Colors.grey[600];
 
+    // 2. Negative Balance Logic
+    final bool isNegative = currentWallet.currentBalance < 0;
+
+    // 3. Dynamic Header Color
+    final Color headerColor = isNegative
+        ? (isDark ? const Color(0xFFB71C1C) : const Color(0xFFC62828)) // Dark Red (Dark Mode) vs Red (Light Mode)
+        : (isDark ? const Color(0xFF1E1E1E) : Colors.teal); // Dark Grey (Dark Mode) vs Teal (Light Mode)
+
     return Scaffold(
       backgroundColor: bgColor,
       appBar: AppBar(
-        title: Text(wallet.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.teal,
+        title: Text(currentWallet.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: headerColor, // Apply dynamic color
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
           IconButton(
             icon: const Icon(Icons.analytics_outlined),
             tooltip: "Analytics",
-            onPressed: () => _showAnalyticsBottomSheet(context, ref, wallet, isDark),
+            onPressed: () => _showAnalyticsBottomSheet(context, ref, currentWallet, isDark),
           ),
           IconButton(
             icon: const Icon(Icons.picture_as_pdf_outlined),
             tooltip: "Export PDF",
-            onPressed: () => _exportPdf(context, ref, wallet),
+            onPressed: () => _exportPdf(context, ref, currentWallet),
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
-          final currentBalance = walletAsync.value?.currentBalance ?? wallet.currentBalance;
           showDialog(
             context: context,
             builder: (_) => AddExpenseDialog(
-              walletId: wallet.id,
-              currentBalance: currentBalance,
+              walletId: currentWallet.id,
+              currentBalance: currentWallet.currentBalance,
             ),
           );
         },
         label: const Text("Add Expense"),
         icon: const Icon(Icons.add_shopping_cart),
-        backgroundColor: Colors.teal,
+        backgroundColor: isDark ? const Color(0xFF00695C) : Colors.teal, // Slightly darker in dark mode
         foregroundColor: Colors.white,
       ),
       body: Column(
         children: [
-          // 1. Modern Header Block (Colors handled inside)
-          walletAsync.when(
-            data: (liveWallet) => _buildHeader(liveWallet, isDark),
-            loading: () => _buildHeader(wallet, isDark, isLoading: true),
-            error: (e, s) => Container(padding: const EdgeInsets.all(20), child: Text("Error: $e", style: TextStyle(color: textColor))),
-          ),
+          // 1. Modern Header Block with Negative Balance Support
+          _buildHeader(currentWallet, isDark, headerColor, isNegative, isLoading: walletAsync.isLoading),
 
           // 2. Expense List
           Expanded(
@@ -110,7 +116,7 @@ class WalletDetailScreen extends ConsumerWidget {
                         ...dayExpenses.map((expense) {
                           return _buildExpenseTile(
                               context, ref, expense,
-                              liveWallet: walletAsync.value ?? wallet,
+                              liveWallet: currentWallet,
                               isDark: isDark,
                               cardColor: cardColor,
                               textColor: textColor
@@ -130,9 +136,11 @@ class WalletDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildHeader(WalletModel wallet, bool isDark, {bool isLoading = false}) {
-    final bgColor = isDark ? const Color(0xFF1E1E1E) : Colors.teal;
-    final shadowColor = isDark ? Colors.black26 : Colors.teal.withOpacity(0.4);
+  Widget _buildHeader(WalletModel wallet, bool isDark, Color bgColor, bool isNegative, {bool isLoading = false}) {
+    // Dynamic Shadow based on background color
+    final shadowColor = isNegative
+        ? Colors.red.withOpacity(0.3)
+        : (isDark ? Colors.black26 : Colors.teal.withOpacity(0.4));
 
     return Container(
       width: double.infinity,
@@ -155,6 +163,8 @@ class WalletDetailScreen extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 10),
+
+          // Budget Pill
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
@@ -166,6 +176,33 @@ class WalletDetailScreen extends ConsumerWidget {
               style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
             ),
           ),
+
+          // "Over Budget" Warning Pill (Visible only if negative)
+          if (isNegative) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.warning_amber_rounded, color: Colors.red, size: 16),
+                  const SizedBox(width: 4),
+                  Text(
+                    "Over Budget",
+                    style: TextStyle(
+                        color: Colors.red[800],
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12
+                    ),
+                  ),
+                ],
+              ),
+            )
+          ]
         ],
       ),
     );
@@ -207,7 +244,7 @@ class WalletDetailScreen extends ConsumerWidget {
       },
       onDismissed: (_) {
         ref.read(expenseRepositoryProvider).deleteExpense(
-            walletId: wallet.id, expenseId: expense.id, amount: expense.amount);
+            walletId: liveWallet.id, expenseId: expense.id, amount: expense.amount);
       },
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -238,7 +275,7 @@ class WalletDetailScreen extends ConsumerWidget {
             showDialog(
               context: context,
               builder: (_) => AddExpenseDialog(
-                walletId: wallet.id,
+                walletId: liveWallet.id,
                 currentBalance: liveWallet.currentBalance,
                 expenseToEdit: expense,
               ),
