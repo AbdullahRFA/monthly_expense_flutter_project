@@ -1,11 +1,11 @@
-import 'dart:convert'; // For Web Base64
+import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/foundation.dart' show kIsWeb; // Web Check
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:monthly_expense_flutter_project/core/utils/currency_helper.dart';
-import 'package:monthly_expense_flutter_project/core/utils/profile_image_helper.dart'; // Import this
+import 'package:monthly_expense_flutter_project/core/utils/profile_image_helper.dart';
 import 'package:monthly_expense_flutter_project/features/auth/data/auth_repository.dart';
 import 'package:monthly_expense_flutter_project/features/settings/presentation/settings_screen.dart';
 import 'package:monthly_expense_flutter_project/features/wallet/data/wallet_repository.dart';
@@ -170,7 +170,6 @@ class HomeScreen extends ConsumerWidget {
       backgroundColor: drawerBg,
       child: Column(
         children: [
-          // Use FutureBuilder to load image async when drawer opens
           FutureBuilder<String?>(
             future: ProfileImageHelper.getImagePath(),
             builder: (context, snapshot) {
@@ -194,7 +193,6 @@ class HomeScreen extends ConsumerWidget {
                 currentAccountPicture: CircleAvatar(
                   backgroundColor: Colors.white,
                   backgroundImage: imageProvider,
-                  // Safely handle errors if file is missing/corrupt
                   onBackgroundImageError: imageProvider != null ? (_, __) {} : null,
                   child: imageProvider == null
                       ? Text(
@@ -228,7 +226,6 @@ class HomeScreen extends ConsumerWidget {
             title: Text("Settings", style: TextStyle(color: textColor)),
             onTap: () async {
               Navigator.pop(context);
-              // Wait for settings to close to refresh drawer if needed (though FutureBuilder handles it on rebuild)
               await Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
             },
           ),
@@ -248,8 +245,7 @@ class HomeScreen extends ConsumerWidget {
   }
 }
 
-// ... _WalletCard remains unchanged ...
-// (Include the _WalletCard class here exactly as it was in the previous file content provided in context)
+// --- 2. MODERN WALLET CARD (UPDATED BACKGROUND LOGIC) ---
 class _WalletCard extends StatelessWidget {
   final WalletModel wallet;
   final WidgetRef ref;
@@ -259,23 +255,30 @@ class _WalletCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Colors
-    final cardColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
+    // Check status
+    final bool isNegative = wallet.currentBalance < 0;
+    final bool isLowBalance = wallet.currentBalance < (wallet.monthlyBudget * 0.2);
+
+    // Dynamic Card Colors
+    Color cardColor;
+    if (isNegative) {
+      // Red background for negative balance
+      cardColor = isDark ? const Color(0xFF3E1515) : const Color(0xFFFFEBEE);
+    } else {
+      // Normal background
+      cardColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
+    }
+
     final textColor = isDark ? Colors.white : Colors.black87;
     final subTextColor = isDark ? Colors.grey[400] : Colors.grey[600];
-    final shadowColor = isDark ? Colors.transparent : Colors.teal.withOpacity(0.15);
+    final shadowColor = isDark ? Colors.transparent : (isNegative ? Colors.red.withOpacity(0.1) : Colors.teal.withOpacity(0.15));
 
     // Calculate progress
     final double progress = (wallet.monthlyBudget == 0)
         ? 0
         : (wallet.monthlyBudget - wallet.currentBalance) / wallet.monthlyBudget;
 
-    // Clamp progress
     final double safeProgress = progress.clamp(0.0, 1.0);
-
-    // Dynamic Colors based on balance status
-    final bool isLowBalance = wallet.currentBalance < (wallet.monthlyBudget * 0.2);
-    final bool isNegative = wallet.currentBalance < 0;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -346,6 +349,7 @@ class _WalletCard extends StatelessWidget {
                     value: 1.0 - safeProgress,
                     minHeight: 8,
                     backgroundColor: isDark ? Colors.grey[800] : Colors.grey[200],
+                    // If negative, show Red bar. If low balance, Orange. Else Green.
                     color: isNegative ? Colors.red : (isLowBalance ? Colors.orange : Colors.green),
                   ),
                 ),
