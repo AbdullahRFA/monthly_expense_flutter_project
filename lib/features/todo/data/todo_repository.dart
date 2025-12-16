@@ -8,14 +8,24 @@ class TodoRepository {
   final String userId;
   TodoRepository(this._firestore, this.userId);
 
-  // GET (Sorted by incomplete first, then priority)
+  // GET LIST (Sorted)
   Stream<List<TodoModel>> getTodos() {
     return _firestore.collection('users').doc(userId).collection('todos')
-        .orderBy('isCompleted', descending: false) // Unfinished first
-        .orderBy('priority', descending: true)     // High priority first
+        .orderBy('isCompleted', descending: false)
+        .orderBy('priority', descending: true)
         .orderBy('date', descending: true)
         .snapshots()
         .map((snap) => snap.docs.map((doc) => TodoModel.fromMap(doc.data())).toList());
+  }
+
+  // GET SINGLE (For Detail Screen)
+  Stream<TodoModel> getTodo(String id) {
+    return _firestore.collection('users').doc(userId).collection('todos').doc(id)
+        .snapshots()
+        .map((doc) {
+      if (!doc.exists) throw Exception("Task deleted");
+      return TodoModel.fromMap(doc.data()!);
+    });
   }
 
   // CREATE
@@ -38,7 +48,7 @@ class TodoRepository {
     await doc.set(todo.toMap());
   }
 
-  // UPDATE (Full Edit)
+  // UPDATE
   Future<void> updateTodo(TodoModel todo) async {
     await _firestore.collection('users').doc(userId).collection('todos').doc(todo.id)
         .update(todo.toMap());
@@ -63,3 +73,8 @@ final todoRepositoryProvider = Provider<TodoRepository>((ref) {
 });
 
 final todoListProvider = StreamProvider((ref) => ref.watch(todoRepositoryProvider).getTodos());
+
+// NEW: Single Todo Provider
+final todoStreamProvider = StreamProvider.family<TodoModel, String>((ref, id) {
+  return ref.watch(todoRepositoryProvider).getTodo(id);
+});

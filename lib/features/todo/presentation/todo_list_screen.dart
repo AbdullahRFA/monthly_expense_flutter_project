@@ -4,7 +4,8 @@ import 'package:intl/intl.dart';
 import '../../providers/theme_provider.dart';
 import '../data/todo_repository.dart';
 import '../domain/todo_model.dart';
-import 'add_edit_todo_dialog.dart'; // IMPORT THE FULL DIALOG
+import 'add_edit_todo_dialog.dart';
+import 'task_detail_screen.dart'; // IMPORT THIS
 
 class TodoListScreen extends ConsumerWidget {
   const TodoListScreen({super.key});
@@ -25,7 +26,6 @@ class TodoListScreen extends ConsumerWidget {
         iconTheme: IconThemeData(color: textColor),
         elevation: 0,
       ),
-      // 1. ADD BUTTON (Opens Full Dialog)
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
@@ -92,11 +92,13 @@ class _TodoCard extends StatelessWidget {
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        // 2. EDIT ON TAP
+        // 2. NAVIGATE TO DETAIL SCREEN ON TAP
         onTap: () {
-          showDialog(
-            context: context,
-            builder: (_) => AddEditTodoDialog(todoToEdit: todo),
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => TaskDetailScreen(todoId: todo.id, initialTodo: todo),
+            ),
           );
         },
         child: Padding(
@@ -142,7 +144,7 @@ class _TodoCard extends StatelessWidget {
                           const SizedBox(height: 4),
                           Text(
                             todo.description,
-                            maxLines: 2,
+                            maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(fontSize: 13, color: subTextColor),
                           ),
@@ -150,23 +152,14 @@ class _TodoCard extends StatelessWidget {
                       ],
                     ),
                   ),
-
-                  // 3. DELETE BUTTON (Visible)
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline, size: 20, color: Colors.grey),
-                    onPressed: () {
-                      _confirmDelete(context, ref);
-                    },
-                  ),
                 ],
               ),
 
-              // 4. METADATA ROW (Due Date & Priority)
+              // Metadata Row (Priority & Date)
               Padding(
-                padding: const EdgeInsets.only(left: 52, top: 8),
+                padding: const EdgeInsets.only(left: 52, top: 4),
                 child: Row(
                   children: [
-                    // Priority Badge
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
@@ -176,21 +169,15 @@ class _TodoCard extends StatelessWidget {
                       ),
                       child: Text(
                         todo.priority.name.toUpperCase(),
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: todo.priorityColor,
-                        ),
+                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: todo.priorityColor),
                       ),
                     ),
-                    const SizedBox(width: 12),
-
-                    // Due Date Display
                     if (todo.dueDate != null) ...[
+                      const SizedBox(width: 12),
                       Icon(Icons.calendar_today_rounded, size: 14, color: subTextColor),
                       const SizedBox(width: 4),
                       Text(
-                        DateFormat('MMM d, y').format(todo.dueDate!),
+                        DateFormat('MMM d').format(todo.dueDate!),
                         style: TextStyle(fontSize: 12, color: subTextColor, fontWeight: FontWeight.w500),
                       ),
                     ],
@@ -200,26 +187,6 @@ class _TodoCard extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  void _confirmDelete(BuildContext context, WidgetRef ref) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text("Delete Task?"),
-        content: const Text("This cannot be undone."),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
-          TextButton(
-            onPressed: () {
-              ref.read(todoRepositoryProvider).deleteTodo(todo.id);
-              Navigator.pop(ctx);
-            },
-            child: const Text("Delete", style: TextStyle(color: Colors.red)),
-          ),
-        ],
       ),
     );
   }
