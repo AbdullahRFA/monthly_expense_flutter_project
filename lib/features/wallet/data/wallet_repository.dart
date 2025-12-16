@@ -11,27 +11,24 @@ class WalletRepository {
 
   WalletRepository(this._firestore, this.userId);
 
-  // 1. CREATE WALLET (Offline Compatible using Batch)
-  Future<void> addWallet({
+  // 1. CREATE WALLET (Returns ID for chaining)
+  Future<String> addWallet({
     required String name,
     required double monthlyBudget,
     double rolloverAmount = 0.0,
     String? sourceWalletId,
     String? sourceWalletName,
   }) async {
-    // Use Batch instead of Transaction for offline support
     final batch = _firestore.batch();
-
     final userRef = _firestore.collection('users').doc(userId);
     final newWalletRef = userRef.collection('wallets').doc();
     final now = DateTime.now();
 
-    // --- STEP 1: HANDLE SOURCE WALLET ---
+    // Handle Source Wallet Rollover Deduction
     if (sourceWalletId != null && rolloverAmount > 0) {
       final sourceWalletRef = userRef.collection('wallets').doc(sourceWalletId);
       final sourceExpenseRef = sourceWalletRef.collection('expenses').doc();
 
-      // Decrement balance using FieldValue (safe for offline)
       batch.update(sourceWalletRef, {
         'currentBalance': FieldValue.increment(-rolloverAmount),
       });
@@ -46,7 +43,7 @@ class WalletRepository {
       batch.set(sourceExpenseRef, deductionRecord.toMap());
     }
 
-    // --- STEP 2: HANDLE NEW WALLET ---
+    // Create New Wallet
     final newWallet = WalletModel(
       id: newWalletRef.id,
       name: name,
@@ -57,26 +54,65 @@ class WalletRepository {
     );
     batch.set(newWalletRef, newWallet.toMap());
 
+    // Record Income in New Wallet
     if (sourceWalletName != null && rolloverAmount > 0) {
       final newExpenseRef = newWalletRef.collection('expenses').doc();
-
       final incomeRecord = ExpenseModel(
         id: newExpenseRef.id,
         title: "Rollover from $sourceWalletName",
-        amount: -rolloverAmount, // Negative amount usually implies income in your logic?
-        // Or if you track positive expenses, this logically adds funds.
-        // Based on previous logic, let's keep consistency.
+        amount: -rolloverAmount, // Negative amount = Income/Credit
         category: "Others",
         date: now,
       );
       batch.set(newExpenseRef, incomeRecord.toMap());
     }
 
-    // Commit all changes locally (and sync when online)
+    await batch.commit();
+    return newWalletRef.id;
+  }
+
+  // 2. TRANSFER FUNDS (Wallet to Wallet)
+  Future<void> transferFunds({
+    required String sourceWalletId,
+    required String sourceWalletName,
+    required String destWalletId,
+    required String destWalletName,
+    required double amount,
+  }) async {
+    final batch = _firestore.batch();
+    final userRef = _firestore.collection('users').doc(userId);
+    final now = DateTime.now();
+
+    // Source: Deduct
+    final sourceRef = userRef.collection('wallets').doc(sourceWalletId);
+    final sourceExpRef = sourceRef.collection('expenses').doc();
+
+    batch.update(sourceRef, {'currentBalance': FieldValue.increment(-amount)});
+    batch.set(sourceExpRef, ExpenseModel(
+      id: sourceExpRef.id,
+      title: "Transfer to $destWalletName",
+      amount: amount,
+      category: "Transfer",
+      date: now,
+    ).toMap());
+
+    // Destination: Add
+    final destRef = userRef.collection('wallets').doc(destWalletId);
+    final destExpRef = destRef.collection('expenses').doc();
+
+    batch.update(destRef, {'currentBalance': FieldValue.increment(amount)});
+    batch.set(destExpRef, ExpenseModel(
+      id: destExpRef.id,
+      title: "Transfer from $sourceWalletName",
+      amount: -amount, // Negative = Income
+      category: "Transfer",
+      date: now,
+    ).toMap());
+
     await batch.commit();
   }
 
-  // 2. GET ALL WALLETS
+  // 3. GET ALL WALLETS
   Stream<List<WalletModel>> getWallets() {
     return _firestore
         .collection('users')
@@ -84,15 +120,13 @@ class WalletRepository {
         .collection('wallets')
         .orderBy('year', descending: true)
         .orderBy('month', descending: true)
-        .snapshots() // snapshots() works offline automatically
+        .snapshots()
         .map((snapshot) {
-      return snapshot.docs.map((doc) {
-        return WalletModel.fromMap(doc.data());
-      }).toList();
+      return snapshot.docs.map((doc) => WalletModel.fromMap(doc.data())).toList();
     });
   }
 
-  // 3. GET SINGLE WALLET
+  // 4. GET SINGLE WALLET
   Stream<WalletModel> getWallet(String walletId) {
     return _firestore
         .collection('users')
@@ -101,55 +135,37 @@ class WalletRepository {
         .doc(walletId)
         .snapshots()
         .map((doc) {
-      if (!doc.exists) {
-        throw Exception("Wallet deleted");
-      }
+      if (!doc.exists) throw Exception("Wallet deleted");
       return WalletModel.fromMap(doc.data() as Map<String, dynamic>);
     });
   }
 
-  // 4. EDIT WALLET
+  // 5. UPDATE WALLET
   Future<void> updateWallet({
     required WalletModel oldWallet,
     required String newName,
     required double newBudget,
   }) async {
     final double difference = newBudget - oldWallet.monthlyBudget;
-
-    await _firestore
-        .collection('users')
-        .doc(userId)
-        .collection('wallets')
-        .doc(oldWallet.id)
-        .update({
+    await _firestore.collection('users').doc(userId).collection('wallets').doc(oldWallet.id).update({
       'name': newName,
       'monthlyBudget': newBudget,
       'currentBalance': FieldValue.increment(difference),
     });
   }
 
-  // 5. DELETE WALLET
+  // 6. DELETE WALLET
   Future<void> deleteWallet(String walletId) async {
-    await _firestore
-        .collection('users')
-        .doc(userId)
-        .collection('wallets')
-        .doc(walletId)
-        .delete();
+    await _firestore.collection('users').doc(userId).collection('wallets').doc(walletId).delete();
   }
 }
 
 // ---------------- PROVIDERS ----------------
-
 final walletRepositoryProvider = Provider<WalletRepository>((ref) {
   final firestore = ref.read(firebaseFirestoreProvider);
   final authState = ref.watch(authStateProvider);
   final user = authState.value;
-
-  if (user == null) {
-    throw Exception("User must be logged in to access WalletRepository");
-  }
-
+  if (user == null) throw Exception("User must be logged in");
   return WalletRepository(firestore, user.uid);
 });
 

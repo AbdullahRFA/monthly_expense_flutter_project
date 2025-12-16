@@ -3,11 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:monthly_expense_flutter_project/core/utils/currency_helper.dart';
 import 'package:monthly_expense_flutter_project/features/wallet/data/wallet_repository.dart';
-import '../../providers/theme_provider.dart'; // Import Theme Provider
+import '../../providers/theme_provider.dart';
 import '../data/savings_repository.dart';
 import '../domain/savings_goal_model.dart';
 import 'add_goal_dialog.dart';
 import 'deposit_dialog.dart';
+import 'withdraw_goal_dialog.dart'; // Ensure this file exists from previous steps
 
 class SavingsListScreen extends ConsumerWidget {
   const SavingsListScreen({super.key});
@@ -124,11 +125,9 @@ class SavingsListScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final savingsAsync = ref.watch(savingsListProvider);
-
-    // 1. WATCH THEME STATE
     final isDark = ref.watch(themeProvider);
 
-    // 2. DEFINE DYNAMIC COLORS
+    // Dynamic Colors
     final bgColor = isDark ? const Color(0xFF121212) : Colors.grey[50];
     final cardColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
     final textColor = isDark ? Colors.white : Colors.black87;
@@ -151,7 +150,7 @@ class SavingsListScreen extends ConsumerWidget {
         foregroundColor: Colors.white,
         onPressed: () => showDialog(
             context: context,
-            builder: (_) => const AddGoalDialog() // Note: AddGoalDialog also needs to be theme-aware, assuming it inherits Theme.of(context)
+            builder: (_) => const AddGoalDialog()
         ),
       ),
       body: savingsAsync.when(
@@ -174,6 +173,7 @@ class SavingsListScreen extends ConsumerWidget {
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
             itemCount: goals.length,
             itemBuilder: (context, index) {
+              // Ensure strictly named arguments here
               return _SavingsGoalCard(
                 goal: goals[index],
                 isDark: isDark,
@@ -218,7 +218,6 @@ class _SavingsGoalCard extends StatelessWidget {
     final String percentage = (progress * 100).toStringAsFixed(1);
     final bool isCompleted = progress >= 1.0;
 
-    // Dynamic background for icons
     final iconBgColor = isCompleted
         ? (isDark ? Colors.green.withOpacity(0.2) : Colors.green.shade50)
         : (isDark ? Colors.teal.withOpacity(0.2) : Colors.teal.shade50);
@@ -343,26 +342,54 @@ class _SavingsGoalCard extends StatelessWidget {
 
             const SizedBox(height: 20),
 
-            // Deposit Button
-            SizedBox(
-              width: double.infinity,
-              height: 45,
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.teal,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            // ACTION BUTTONS (Updated with Withdraw)
+            Row(
+              children: [
+                // Withdraw Button
+                Expanded(
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: textColor,
+                      side: BorderSide(color: isDark ? Colors.grey[700]! : Colors.grey[300]!),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    icon: const Icon(Icons.arrow_upward_rounded, size: 18),
+                    label: const Text("Withdraw"),
+                    onPressed: () {
+                      showDialog(
+                          context: context,
+                          builder: (_) => WithdrawGoalDialog(
+                              goalId: goal.id,
+                              goalTitle: goal.title,
+                              currentSaved: goal.currentSaved
+                          )
+                      );
+                    },
+                  ),
                 ),
-                icon: const Icon(Icons.arrow_downward_rounded, size: 18),
-                label: const Text("Deposit Funds", style: TextStyle(fontWeight: FontWeight.bold)),
-                onPressed: () {
-                  showDialog(
-                    context: context,
-                    builder: (_) => DepositDialog(goalId: goal.id, goalTitle: goal.title),
-                  );
-                },
-              ),
+                const SizedBox(width: 12),
+                // Deposit Button
+                Expanded(
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.teal,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    icon: const Icon(Icons.arrow_downward_rounded, size: 18),
+                    label: const Text("Deposit"),
+                    onPressed: () {
+                      showDialog(
+                        context: context,
+                        builder: (_) => DepositDialog(goalId: goal.id, goalTitle: goal.title),
+                      );
+                    },
+                  ),
+                ),
+              ],
             ),
           ],
         ),

@@ -191,121 +191,124 @@ class _AddExpenseDialogState extends ConsumerState<AddExpenseDialog> {
     final iconColor = isDark ? Colors.grey[400] : Colors.grey;
     final subTextColor = isDark ? Colors.grey[400] : Colors.grey[600];
 
-    return Dialog(
-      backgroundColor: dialogColor,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      child: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Header
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.withOpacity(isDark ? 0.2 : 0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(isEdit ? Icons.edit_outlined : Icons.receipt_long_rounded, color: Colors.orange),
-                    ),
-                    const SizedBox(width: 16),
-                    Text(
-                      isEdit ? "Edit Expense" : "New Expense",
-                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: textColor),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-
-                // Item Name
-                TextFormField(
-                  controller: _titleController,
-                  style: TextStyle(color: textColor),
-                  decoration: _buildInputDecoration("Item Name", "e.g., Dinner", Icons.shopping_bag_outlined, isDark, inputFill, borderColor),
-                  validator: (v) => v!.isEmpty ? "Required" : null,
-                ),
-                const SizedBox(height: 16),
-
-                // Amount
-                TextFormField(
-                  controller: _amountController,
-                  style: TextStyle(color: textColor),
-                  decoration: _buildInputDecoration("Amount", "0.00", Icons.attach_money, isDark, inputFill, borderColor),
-                  keyboardType: TextInputType.number,
-                  validator: (v) => v!.isEmpty ? "Required" : null,
-                ),
-                const SizedBox(height: 16),
-
-                // Date Picker Card
-                InkWell(
-                  onTap: _pickDate,
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-                    decoration: BoxDecoration(
-                      color: inputFill,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: borderColor),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.calendar_today_rounded, color: iconColor),
-                        const SizedBox(width: 12),
-                        Text(
-                          DateFormat('MMM d, y').format(_selectedDate),
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: textColor),
+    return PopScope(
+      canPop: !_isLoading, // PREVENT DISMISSAL WHEN LOADING
+      child: Dialog(
+        backgroundColor: dialogColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withOpacity(isDark ? 0.2 : 0.1),
+                          shape: BoxShape.circle,
                         ),
-                        const Spacer(),
-                        const Text("Change", style: TextStyle(color: Colors.teal, fontWeight: FontWeight.bold)),
-                      ],
+                        child: Icon(isEdit ? Icons.edit_outlined : Icons.receipt_long_rounded, color: Colors.orange),
+                      ),
+                      const SizedBox(width: 16),
+                      Text(
+                        isEdit ? "Edit Expense" : "New Expense",
+                        style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: textColor),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Item Name
+                  TextFormField(
+                    controller: _titleController,
+                    style: TextStyle(color: textColor),
+                    decoration: _buildInputDecoration("Item Name", "e.g., Dinner", Icons.shopping_bag_outlined, isDark, inputFill, borderColor),
+                    validator: (v) => v!.isEmpty ? "Required" : null,
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Amount
+                  TextFormField(
+                    controller: _amountController,
+                    style: TextStyle(color: textColor),
+                    decoration: _buildInputDecoration("Amount", "0.00", Icons.attach_money, isDark, inputFill, borderColor),
+                    keyboardType: TextInputType.number,
+                    validator: (v) => v!.isEmpty ? "Required" : null,
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Date Picker Card
+                  InkWell(
+                    onTap: _pickDate,
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+                      decoration: BoxDecoration(
+                        color: inputFill,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: borderColor),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.calendar_today_rounded, color: iconColor),
+                          const SizedBox(width: 12),
+                          Text(
+                            DateFormat('MMM d, y').format(_selectedDate),
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: textColor),
+                          ),
+                          const Spacer(),
+                          const Text("Change", style: TextStyle(color: Colors.teal, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 16),
+                  const SizedBox(height: 16),
 
-                // Category Dropdown
-                DropdownButtonFormField<String>(
-                  value: _selectedCategory,
-                  items: _categories.map((c) => DropdownMenuItem(value: c, child: Text(c, style: TextStyle(color: textColor)))).toList(),
-                  onChanged: (val) => setState(() => _selectedCategory = val!),
-                  dropdownColor: dialogColor,
-                  style: TextStyle(color: textColor),
-                  decoration: _buildInputDecoration("Category", "", Icons.category_outlined, isDark, inputFill, borderColor),
-                  icon: const Icon(Icons.keyboard_arrow_down_rounded),
-                ),
-                const SizedBox(height: 30),
+                  // Category Dropdown
+                  DropdownButtonFormField<String>(
+                    value: _selectedCategory,
+                    items: _categories.map((c) => DropdownMenuItem(value: c, child: Text(c, style: TextStyle(color: textColor)))).toList(),
+                    onChanged: (val) => setState(() => _selectedCategory = val!),
+                    dropdownColor: dialogColor,
+                    style: TextStyle(color: textColor),
+                    decoration: _buildInputDecoration("Category", "", Icons.category_outlined, isDark, inputFill, borderColor),
+                    icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                  ),
+                  const SizedBox(height: 30),
 
-                // Actions
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: Text("Cancel", style: TextStyle(color: subTextColor)),
-                    ),
-                    const SizedBox(width: 12),
-                    ElevatedButton(
-                      onPressed: _isLoading ? null : _checkAndSave,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.teal,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        elevation: 0,
+                  // Actions
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: _isLoading ? null : () => Navigator.pop(context),
+                        child: Text("Cancel", style: TextStyle(color: subTextColor)),
                       ),
-                      child: _isLoading
-                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                          : Text(isEdit ? "Update Transaction" : "Add Transaction"),
-                    ),
-                  ],
-                ),
-              ],
+                      const SizedBox(width: 12),
+                      ElevatedButton(
+                        onPressed: _isLoading ? null : _checkAndSave,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.teal,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          elevation: 0,
+                        ),
+                        child: _isLoading
+                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                            : Text(isEdit ? "Update Transaction" : "Add Transaction"),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),

@@ -11,7 +11,7 @@ import 'package:monthly_expense_flutter_project/core/utils/pdf_helper.dart';
 import 'package:monthly_expense_flutter_project/features/analytics/presentation/budget_summary_card.dart';
 import 'package:monthly_expense_flutter_project/features/analytics/presentation/spending_trend_chart.dart';
 import '../../providers/theme_provider.dart';
-
+import 'transfer_wallet_dialog.dart'; // Import this
 class WalletDetailScreen extends ConsumerWidget {
   final WalletModel wallet;
 
@@ -48,6 +48,16 @@ class WalletDetailScreen extends ConsumerWidget {
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.swap_horiz_rounded), // Transfer Icon
+            tooltip: "Transfer Funds",
+            onPressed: () {
+              showDialog(
+                  context: context,
+                  builder: (_) => TransferWalletDialog(initialSourceWalletId: currentWallet.id)
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.analytics_outlined),
             tooltip: "Analytics",
