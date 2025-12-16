@@ -8,7 +8,7 @@ import '../data/savings_repository.dart';
 import '../domain/savings_goal_model.dart';
 import 'add_goal_dialog.dart';
 import 'deposit_dialog.dart';
-import 'withdraw_goal_dialog.dart'; // Ensure this file exists from previous steps
+import 'withdraw_goal_dialog.dart';
 
 class SavingsListScreen extends ConsumerWidget {
   const SavingsListScreen({super.key});
@@ -173,7 +173,6 @@ class SavingsListScreen extends ConsumerWidget {
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
             itemCount: goals.length,
             itemBuilder: (context, index) {
-              // Ensure strictly named arguments here
               return _SavingsGoalCard(
                 goal: goals[index],
                 isDark: isDark,
@@ -342,7 +341,7 @@ class _SavingsGoalCard extends StatelessWidget {
 
             const SizedBox(height: 20),
 
-            // ACTION BUTTONS (Updated with Withdraw)
+            // ACTION BUTTONS (Withdraw & Deposit)
             Row(
               children: [
                 // Withdraw Button

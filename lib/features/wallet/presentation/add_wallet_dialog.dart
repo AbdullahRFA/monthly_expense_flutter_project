@@ -68,7 +68,7 @@ class _AddWalletDialogState extends ConsumerState<AddWalletDialog> {
     final textColor = isDark ? Colors.white : Colors.black87;
 
     return PopScope(
-      canPop: !_isLoading, // PREVENT DISMISSAL WHEN LOADING
+      canPop: !_isLoading,
       child: Dialog(
         backgroundColor: dialogColor,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -110,8 +110,6 @@ class _AddWalletDialogState extends ConsumerState<AddWalletDialog> {
                   const SizedBox(height: 24),
 
                   if (!isEdit) ...[
-                    // ... Rollover Logic (Same as before, omitted for brevity but should be kept) ...
-                    // I will keep the Dropdown logic minimal here for the example, ensure it matches previous logic
                     walletListAsync.when(
                       data: (wallets) {
                         if(wallets.isEmpty) return const SizedBox.shrink();

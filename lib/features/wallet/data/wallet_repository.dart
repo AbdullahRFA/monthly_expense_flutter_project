@@ -60,7 +60,7 @@ class WalletRepository {
       final incomeRecord = ExpenseModel(
         id: newExpenseRef.id,
         title: "Rollover from $sourceWalletName",
-        amount: -rolloverAmount, // Negative amount = Income/Credit
+        amount: -rolloverAmount, // Negative = Income
         category: "Others",
         date: now,
       );
@@ -83,7 +83,7 @@ class WalletRepository {
     final userRef = _firestore.collection('users').doc(userId);
     final now = DateTime.now();
 
-    // Source: Deduct
+    // Source: Deduct Balance
     final sourceRef = userRef.collection('wallets').doc(sourceWalletId);
     final sourceExpRef = sourceRef.collection('expenses').doc();
 
@@ -96,11 +96,15 @@ class WalletRepository {
       date: now,
     ).toMap());
 
-    // Destination: Add
+    // Destination: Add Balance AND Increase Budget
     final destRef = userRef.collection('wallets').doc(destWalletId);
     final destExpRef = destRef.collection('expenses').doc();
 
-    batch.update(destRef, {'currentBalance': FieldValue.increment(amount)});
+    batch.update(destRef, {
+      'currentBalance': FieldValue.increment(amount),
+      'monthlyBudget': FieldValue.increment(amount), // <--- REQUESTED CHANGE
+    });
+
     batch.set(destExpRef, ExpenseModel(
       id: destExpRef.id,
       title: "Transfer from $sourceWalletName",
