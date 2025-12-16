@@ -1,5 +1,8 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter_quill/flutter_quill.dart' as quill;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import '../../providers/theme_provider.dart';
 import '../data/note_repository.dart';
 import '../domain/note_model.dart';
@@ -37,7 +40,7 @@ class NoteListScreen extends ConsumerWidget {
               crossAxisCount: 2,
               crossAxisSpacing: 12,
               mainAxisSpacing: 12,
-              childAspectRatio: 0.85, // Slightly taller cards
+              childAspectRatio: 0.80, // Taller to fit date
             ),
             padding: const EdgeInsets.all(16),
             itemCount: notes.length,
@@ -60,15 +63,22 @@ class _NoteCard extends StatelessWidget {
 
   const _NoteCard({required this.note, required this.isDark});
 
+  String _getPlainText() {
+    try {
+      final json = jsonDecode(note.content);
+      final doc = quill.Document.fromJson(json);
+      return doc.toPlainText().trim();
+    } catch (e) {
+      return note.content; // Fallback for old plain text notes
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Determine Card Color
     Color cardColor = Color(note.colorValue);
     if (isDark && note.colorValue == 0xFFFFFFFF) {
-      cardColor = const Color(0xFF1E1E1E); // Default Dark
+      cardColor = const Color(0xFF1E1E1E);
     }
-
-    // Determine Text Color (Black for colored notes, White for dark mode default)
     final textColor = (isDark && note.colorValue == 0xFFFFFFFF) ? Colors.white : Colors.black87;
 
     return GestureDetector(
@@ -97,10 +107,16 @@ class _NoteCard extends StatelessWidget {
             const SizedBox(height: 8),
             Expanded(
               child: Text(
-                note.content,
+                _getPlainText(),
                 overflow: TextOverflow.fade,
                 style: TextStyle(fontSize: 14, color: textColor.withOpacity(0.8), height: 1.4),
               ),
+            ),
+            const SizedBox(height: 8),
+            // --- CREATION DATE ---
+            Text(
+              DateFormat('MMM d, yyyy').format(note.date),
+              style: TextStyle(fontSize: 11, color: textColor.withOpacity(0.5), fontStyle: FontStyle.italic),
             ),
           ],
         ),

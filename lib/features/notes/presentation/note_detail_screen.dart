@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter_quill/flutter_quill.dart' as quill;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../providers/theme_provider.dart';
@@ -22,12 +24,25 @@ class NoteDetailScreen extends ConsumerWidget {
       error: (e, s) => Scaffold(body: Center(child: Text("Error: $e"))),
       data: (note) {
 
-        // Color Logic
         Color bgColor = Color(note.colorValue);
         if (isDark && note.colorValue == 0xFFFFFFFF) {
           bgColor = const Color(0xFF1E1E1E);
         }
         final textColor = (isDark && note.colorValue == 0xFFFFFFFF) ? Colors.white : Colors.black87;
+
+        quill.QuillController _controller;
+        try {
+          final json = jsonDecode(note.content);
+          _controller = quill.QuillController(
+            document: quill.Document.fromJson(json),
+            selection: const TextSelection.collapsed(offset: 0),
+          );
+        } catch (e) {
+          _controller = quill.QuillController(
+            document: quill.Document()..insert(0, note.content),
+            selection: const TextSelection.collapsed(offset: 0),
+          );
+        }
 
         return Scaffold(
           backgroundColor: bgColor,
@@ -50,7 +65,7 @@ class NoteDetailScreen extends ConsumerWidget {
               ),
             ],
           ),
-          body: SingleChildScrollView(
+          body: Padding(
             padding: const EdgeInsets.all(24),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -59,15 +74,43 @@ class NoteDetailScreen extends ConsumerWidget {
                   note.title,
                   style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: textColor),
                 ),
-                const SizedBox(height: 12),
-                Text(
-                  "Last edited: ${DateFormat('MMM d, h:mm a').format(note.lastEdited)}",
-                  style: TextStyle(fontSize: 12, color: textColor.withOpacity(0.6)),
+                const SizedBox(height: 20),
+
+                Expanded(
+                  child: quill.QuillEditor.basic(
+                    controller: _controller,
+                    configurations: quill.QuillEditorConfigurations(
+                      autoFocus: false,
+                      expands: false,
+                      enableInteractiveSelection: false,
+                      // Fixed: Added missing HorizontalSpacing(0, 0)
+                      customStyles: quill.DefaultStyles(
+                        paragraph: quill.DefaultTextBlockStyle(
+                            TextStyle(fontSize: 18, height: 1.6, color: textColor),
+                            const quill.HorizontalSpacing(0, 0), // <--- MISSING ARGUMENT ADDED
+                            const quill.VerticalSpacing(0, 0),
+                            const quill.VerticalSpacing(0, 0),
+                            null
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
-                const SizedBox(height: 24),
-                Text(
-                  note.content,
-                  style: TextStyle(fontSize: 18, height: 1.6, color: textColor),
+
+                const Divider(),
+
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      "Created: ${DateFormat('MMM d, yyyy').format(note.date)}",
+                      style: TextStyle(fontSize: 12, color: textColor.withOpacity(0.6), fontStyle: FontStyle.italic),
+                    ),
+                    Text(
+                      "Edited: ${DateFormat('h:mm a').format(note.lastEdited)}",
+                      style: TextStyle(fontSize: 12, color: textColor.withOpacity(0.6)),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -88,8 +131,8 @@ class NoteDetailScreen extends ConsumerWidget {
           TextButton(
             onPressed: () {
               ref.read(noteRepositoryProvider).deleteNote(noteId);
-              Navigator.pop(ctx); // Close Dialog
-              Navigator.pop(context); // Close Screen
+              Navigator.pop(ctx);
+              Navigator.pop(context);
             },
             child: const Text("Delete", style: TextStyle(color: Colors.red)),
           ),
