@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../auth/data/auth_repository.dart';
@@ -6,54 +7,62 @@ import '../domain/note_model.dart';
 class NoteRepository {
   final FirebaseFirestore _firestore;
   final String userId;
+  final Duration _offlineTimeout = const Duration(seconds: 2);
+
   NoteRepository(this._firestore, this.userId);
 
-  // GET LIST (Sorted by last edited)
   Stream<List<NoteModel>> getNotes() {
     return _firestore.collection('users').doc(userId).collection('notes')
         .orderBy('lastEdited', descending: true)
-        .snapshots()
+        .snapshots(includeMetadataChanges: true)
         .map((snap) => snap.docs.map((doc) => NoteModel.fromMap(doc.data())).toList());
   }
 
-  // GET SINGLE
   Stream<NoteModel> getNote(String id) {
     return _firestore.collection('users').doc(userId).collection('notes').doc(id)
-        .snapshots()
+        .snapshots(includeMetadataChanges: true)
         .map((doc) {
       if (!doc.exists) throw Exception("Note deleted");
       return NoteModel.fromMap(doc.data()!);
     });
   }
 
-  // CREATE
   Future<void> addNote(String title, String content, int colorValue) async {
     final doc = _firestore.collection('users').doc(userId).collection('notes').doc();
     final now = DateTime.now();
-    await doc.set(NoteModel(
-        id: doc.id,
-        title: title,
-        content: content,
-        date: now,
-        lastEdited: now,
-        colorValue: colorValue
-    ).toMap());
+    try {
+      await doc.set(NoteModel(
+          id: doc.id,
+          title: title,
+          content: content,
+          date: now,
+          lastEdited: now,
+          colorValue: colorValue
+      ).toMap()).timeout(_offlineTimeout);
+    } on TimeoutException {
+      // Queued
+    }
   }
 
-  // UPDATE
   Future<void> updateNote(NoteModel note) async {
-    // Only update changed fields + lastEdited
-    await _firestore.collection('users').doc(userId).collection('notes').doc(note.id).update({
-      'title': note.title,
-      'content': note.content,
-      'colorValue': note.colorValue,
-      'lastEdited': Timestamp.fromDate(DateTime.now()),
-    });
+    try {
+      await _firestore.collection('users').doc(userId).collection('notes').doc(note.id).update({
+        'title': note.title,
+        'content': note.content,
+        'colorValue': note.colorValue,
+        'lastEdited': Timestamp.fromDate(DateTime.now()),
+      }).timeout(_offlineTimeout);
+    } on TimeoutException {
+      // Queued
+    }
   }
 
-  // DELETE
   Future<void> deleteNote(String id) async {
-    await _firestore.collection('users').doc(userId).collection('notes').doc(id).delete();
+    try {
+      await _firestore.collection('users').doc(userId).collection('notes').doc(id).delete().timeout(_offlineTimeout);
+    } on TimeoutException {
+      // Queued
+    }
   }
 }
 

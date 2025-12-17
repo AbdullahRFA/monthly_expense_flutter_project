@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,8 +9,17 @@ import '../../expenses/domain/expense_model.dart';
 class SavingsRepository {
   final FirebaseFirestore _firestore;
   final String userId;
+  final Duration _offlineTimeout = const Duration(seconds: 2);
 
   SavingsRepository(this._firestore, this.userId);
+
+  Future<void> _safeCommit(WriteBatch batch) async {
+    try {
+      await batch.commit().timeout(_offlineTimeout);
+    } on TimeoutException {
+      // Queued
+    }
+  }
 
   // 1. ADD GOAL
   Future<void> addGoal({required String title, required double targetAmount, required DateTime deadline}) async {
@@ -21,10 +31,14 @@ class SavingsRepository {
       currentSaved: 0,
       deadline: deadline,
     );
-    await docRef.set(goal.toMap());
+    try {
+      await docRef.set(goal.toMap()).timeout(_offlineTimeout);
+    } on TimeoutException {
+      // Queued
+    }
   }
 
-  // 2. DEPOSIT
+  // 2. DEPOSIT (ACID)
   Future<void> depositToGoal({required String walletId, required String goalId, required String goalTitle, required double amount}) async {
     final batch = _firestore.batch();
     final walletRef = _firestore.collection('users').doc(userId).collection('wallets').doc(walletId);
@@ -39,42 +53,56 @@ class SavingsRepository {
     );
     batch.set(expenseRef, depositExpense.toMap());
 
-    await batch.commit();
+    await _safeCommit(batch);
   }
 
-  // 3. WITHDRAW (Partial Refund)
+  // 3. WITHDRAW (ACID)
   Future<void> withdrawFromGoal({required String goalId, required String goalTitle, required String walletId, required double amount}) async {
     final batch = _firestore.batch();
     final walletRef = _firestore.collection('users').doc(userId).collection('wallets').doc(walletId);
     final goalRef = _firestore.collection('users').doc(userId).collection('savings_goals').doc(goalId);
     final expenseRef = walletRef.collection('expenses').doc();
 
-    // Deduct from Goal
     batch.update(goalRef, {'currentSaved': FieldValue.increment(-amount)});
-
-    // Add to Wallet
     batch.update(walletRef, {'currentBalance': FieldValue.increment(amount)});
 
-    // Record as Income in Wallet
     final refundExpense = ExpenseModel(
       id: expenseRef.id, title: "Withdraw: $goalTitle", amount: -amount, category: "Savings", date: DateTime.now(),
     );
     batch.set(expenseRef, refundExpense.toMap());
 
-    await batch.commit();
+    await _safeCommit(batch);
   }
 
   // 4. GET GOALS
   Stream<List<SavingsGoalModel>> getGoals() {
-    return _firestore.collection('users').doc(userId).collection('savings_goals').snapshots().map((snapshot) {
+    return _firestore
+        .collection('users')
+        .doc(userId)
+        .collection('savings_goals')
+        .snapshots(includeMetadataChanges: true)
+        .map((snapshot) {
       return snapshot.docs.map((doc) => SavingsGoalModel.fromMap(doc.data())).toList();
     });
   }
 
-  // 5. DELETE GOAL
+  // 5. DELETE GOAL (Safe Cache Read + ACID)
   Future<void> deleteGoal({required String goalId, String? refundWalletId}) async {
     final goalRef = _firestore.collection('users').doc(userId).collection('savings_goals').doc(goalId);
-    final goalSnapshot = await goalRef.get(); // Reads local cache if offline
+
+    // IMPORTANT: Read from CACHE first to avoid hanging on low connectivity
+    // if cache is empty (unlikely if we just clicked it), try server.
+    DocumentSnapshot<Map<String, dynamic>> goalSnapshot;
+    try {
+      goalSnapshot = await goalRef.get(const GetOptions(source: Source.cache));
+      if (!goalSnapshot.exists) {
+        // Fallback to server/default if somehow not in cache
+        goalSnapshot = await goalRef.get();
+      }
+    } catch(e) {
+      // If cache read fails, return to avoid crash
+      return;
+    }
 
     if (!goalSnapshot.exists) return;
 
@@ -82,6 +110,7 @@ class SavingsRepository {
     final double savedAmount = (goalSnapshot.data()?['currentSaved'] ?? 0).toDouble();
     final String goalTitle = goalSnapshot.data()?['title'] ?? 'Goal';
 
+    // Refund logic atomic with delete
     if (savedAmount > 0 && refundWalletId != null) {
       final walletRef = _firestore.collection('users').doc(userId).collection('wallets').doc(refundWalletId);
       final expenseRef = walletRef.collection('expenses').doc();
@@ -94,7 +123,8 @@ class SavingsRepository {
       batch.set(expenseRef, refundExpense.toMap());
     }
     batch.delete(goalRef);
-    await batch.commit();
+
+    await _safeCommit(batch);
   }
 }
 

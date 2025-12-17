@@ -1,3 +1,4 @@
+import 'dart:async'; // Import for TimeoutException
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,9 +9,22 @@ class ExpenseRepository {
   final FirebaseFirestore _firestore;
   final String userId;
 
+  // Reduced timeout ensures UI doesn't hang in "Lie-fi"
+  final Duration _offlineTimeout = const Duration(seconds: 2);
+
   ExpenseRepository(this._firestore, this.userId);
 
-  // 1. ADD EXPENSE (Offline Compatible)
+  // Helper to handle offline writes safely
+  Future<void> _safeCommit(WriteBatch batch) async {
+    try {
+      await batch.commit().timeout(_offlineTimeout);
+    } on TimeoutException {
+      // Ignore timeout. Data is written to local cache (Persistence enabled).
+      // The SDK will sync it when connection is stable.
+    }
+  }
+
+  // 1. ADD EXPENSE (ACID: Expense Doc + Wallet Balance)
   Future<void> addExpense({
     required String walletId,
     required String title,
@@ -36,15 +50,13 @@ class ExpenseRepository {
       date: date,
     );
 
-    // Write Expense
+    // Atomic Writes
     batch.set(expenseRef, newExpense.toMap());
-
-    // Update Balance Atomically (Works Offline)
     batch.update(walletRef, {
       'currentBalance': FieldValue.increment(-amount),
     });
 
-    await batch.commit();
+    await _safeCommit(batch);
   }
 
   // 2. GET EXPENSES
@@ -56,7 +68,7 @@ class ExpenseRepository {
         .doc(walletId)
         .collection('expenses')
         .orderBy('date', descending: true)
-        .snapshots()
+        .snapshots(includeMetadataChanges: true) // Update on local changes too
         .map((snapshot) {
       return snapshot.docs.map((doc) {
         return ExpenseModel.fromMap(doc.data());
@@ -64,7 +76,7 @@ class ExpenseRepository {
     });
   }
 
-  // 3. DELETE EXPENSE (Offline Compatible)
+  // 3. DELETE EXPENSE (ACID)
   Future<void> deleteExpense({
     required String walletId,
     required String expenseId,
@@ -75,18 +87,15 @@ class ExpenseRepository {
     final walletRef = _firestore.collection('users').doc(userId).collection('wallets').doc(walletId);
     final expenseRef = walletRef.collection('expenses').doc(expenseId);
 
-    // Restore Balance
     batch.update(walletRef, {
       'currentBalance': FieldValue.increment(amount)
     });
-
-    // Delete Expense
     batch.delete(expenseRef);
 
-    await batch.commit();
+    await _safeCommit(batch);
   }
 
-  // 4. EDIT EXPENSE (Offline Compatible)
+  // 4. EDIT EXPENSE (ACID)
   Future<void> updateExpense({
     required String walletId,
     required ExpenseModel oldExpense,
@@ -99,17 +108,15 @@ class ExpenseRepository {
 
     final difference = oldExpense.amount - newExpense.amount;
 
-    // Update Expense Doc
     batch.update(expenseRef, newExpense.toMap());
 
-    // Adjust Balance if amount changed
     if (difference != 0) {
       batch.update(walletRef, {
         'currentBalance': FieldValue.increment(difference),
       });
     }
 
-    await batch.commit();
+    await _safeCommit(batch);
   }
 }
 

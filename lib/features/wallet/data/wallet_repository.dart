@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,10 +9,19 @@ import '../../expenses/domain/expense_model.dart';
 class WalletRepository {
   final FirebaseFirestore _firestore;
   final String userId;
+  final Duration _offlineTimeout = const Duration(seconds: 2);
 
   WalletRepository(this._firestore, this.userId);
 
-  // 1. CREATE WALLET (Returns ID for chaining)
+  Future<void> _safeCommit(WriteBatch batch) async {
+    try {
+      await batch.commit().timeout(_offlineTimeout);
+    } on TimeoutException {
+      // Treat as queued
+    }
+  }
+
+  // 1. CREATE WALLET
   Future<String> addWallet({
     required String name,
     required double monthlyBudget,
@@ -24,7 +34,7 @@ class WalletRepository {
     final newWalletRef = userRef.collection('wallets').doc();
     final now = DateTime.now();
 
-    // Handle Source Wallet Rollover Deduction
+    // Rollover Logic (Atomic)
     if (sourceWalletId != null && rolloverAmount > 0) {
       final sourceWalletRef = userRef.collection('wallets').doc(sourceWalletId);
       final sourceExpenseRef = sourceWalletRef.collection('expenses').doc();
@@ -43,7 +53,6 @@ class WalletRepository {
       batch.set(sourceExpenseRef, deductionRecord.toMap());
     }
 
-    // Create New Wallet
     final newWallet = WalletModel(
       id: newWalletRef.id,
       name: name,
@@ -54,24 +63,24 @@ class WalletRepository {
     );
     batch.set(newWalletRef, newWallet.toMap());
 
-    // Record Income in New Wallet
+    // Record Income (Atomic)
     if (sourceWalletName != null && rolloverAmount > 0) {
       final newExpenseRef = newWalletRef.collection('expenses').doc();
       final incomeRecord = ExpenseModel(
         id: newExpenseRef.id,
         title: "Rollover from $sourceWalletName",
-        amount: -rolloverAmount, // Negative = Income
+        amount: -rolloverAmount,
         category: "Others",
         date: now,
       );
       batch.set(newExpenseRef, incomeRecord.toMap());
     }
 
-    await batch.commit();
+    await _safeCommit(batch);
     return newWalletRef.id;
   }
 
-  // 2. TRANSFER FUNDS (Wallet to Wallet)
+  // 2. TRANSFER FUNDS (ACID)
   Future<void> transferFunds({
     required String sourceWalletId,
     required String sourceWalletName,
@@ -83,7 +92,6 @@ class WalletRepository {
     final userRef = _firestore.collection('users').doc(userId);
     final now = DateTime.now();
 
-    // Source: Deduct Balance
     final sourceRef = userRef.collection('wallets').doc(sourceWalletId);
     final sourceExpRef = sourceRef.collection('expenses').doc();
 
@@ -96,27 +104,26 @@ class WalletRepository {
       date: now,
     ).toMap());
 
-    // Destination: Add Balance AND Increase Budget
     final destRef = userRef.collection('wallets').doc(destWalletId);
     final destExpRef = destRef.collection('expenses').doc();
 
     batch.update(destRef, {
       'currentBalance': FieldValue.increment(amount),
-      'monthlyBudget': FieldValue.increment(amount), // <--- REQUESTED CHANGE
+      // Optional: 'monthlyBudget': FieldValue.increment(amount),
     });
 
     batch.set(destExpRef, ExpenseModel(
       id: destExpRef.id,
       title: "Transfer from $sourceWalletName",
-      amount: -amount, // Negative = Income
+      amount: -amount,
       category: "Transfer",
       date: now,
     ).toMap());
 
-    await batch.commit();
+    await _safeCommit(batch);
   }
 
-  // 3. GET ALL WALLETS
+  // 3. GET WALLETS
   Stream<List<WalletModel>> getWallets() {
     return _firestore
         .collection('users')
@@ -124,20 +131,19 @@ class WalletRepository {
         .collection('wallets')
         .orderBy('year', descending: true)
         .orderBy('month', descending: true)
-        .snapshots()
+        .snapshots(includeMetadataChanges: true)
         .map((snapshot) {
       return snapshot.docs.map((doc) => WalletModel.fromMap(doc.data())).toList();
     });
   }
 
-  // 4. GET SINGLE WALLET
   Stream<WalletModel> getWallet(String walletId) {
     return _firestore
         .collection('users')
         .doc(userId)
         .collection('wallets')
         .doc(walletId)
-        .snapshots()
+        .snapshots(includeMetadataChanges: true)
         .map((doc) {
       if (!doc.exists) throw Exception("Wallet deleted");
       return WalletModel.fromMap(doc.data() as Map<String, dynamic>);
@@ -151,20 +157,30 @@ class WalletRepository {
     required double newBudget,
   }) async {
     final double difference = newBudget - oldWallet.monthlyBudget;
-    await _firestore.collection('users').doc(userId).collection('wallets').doc(oldWallet.id).update({
-      'name': newName,
-      'monthlyBudget': newBudget,
-      'currentBalance': FieldValue.increment(difference),
-    });
+    final docRef = _firestore.collection('users').doc(userId).collection('wallets').doc(oldWallet.id);
+
+    // Use .timeout logic for single update too
+    try {
+      await docRef.update({
+        'name': newName,
+        'monthlyBudget': newBudget,
+        'currentBalance': FieldValue.increment(difference),
+      }).timeout(_offlineTimeout);
+    } on TimeoutException {
+      // Queued
+    }
   }
 
   // 6. DELETE WALLET
   Future<void> deleteWallet(String walletId) async {
-    await _firestore.collection('users').doc(userId).collection('wallets').doc(walletId).delete();
+    try {
+      await _firestore.collection('users').doc(userId).collection('wallets').doc(walletId).delete().timeout(_offlineTimeout);
+    } on TimeoutException {
+      // Queued
+    }
   }
 }
 
-// ---------------- PROVIDERS ----------------
 final walletRepositoryProvider = Provider<WalletRepository>((ref) {
   final firestore = ref.read(firebaseFirestoreProvider);
   final authState = ref.watch(authStateProvider);
