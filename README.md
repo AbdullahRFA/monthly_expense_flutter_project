@@ -62,7 +62,7 @@
 
 ## 📸 Screenshots
 
-| Home Dashboard | Dark Mode Analytics 1 | Dark Mode Analytics 2 |
+| Wallet Dashboard | Dark Mode Analytics 1 | Dark Mode Analytics 2 |
 |:---:|:---:|:---:|
 | <img src="screenshots/Screenshot 2025-12-15 at 7.34.36 AM.png" width="250"> | <img src="screenshots/Screenshot 2025-12-15 at 7.36.51 AM.png" width="250"> | <img src="screenshots/Screenshot 2025-12-15 at 7.37.10 AM.png" width="250"> |
 
@@ -72,7 +72,7 @@
 
 | Side Bar | Global Summary(Weekly) | Global Summary(yearly)  |
 |:---:|:---:|:---:|
-| <img src="screenshots/Screenshot 2025-12-15 at 7.46.18 AM.png" width="250"> | <img src="screenshots/Screenshot 2025-12-15 at 7.46.59 AM.png" width="250"> | <img src="screenshots/Screenshot 2025-12-15 at 7.47.09 AM.png" width="250"> |
+| <img src="screenshots/Screenshot 2025-12-15 at 7.46.18 AM.png" width="650"> | <img src="screenshots/Screenshot 2025-12-15 at 7.46.59 AM.png" width="250"> | <img src="screenshots/Screenshot 2025-12-15 at 7.47.09 AM.png" width="250"> |
 
 | PDF Export | Settings | Create wallet dialog |
 |:---:|:---:|:---:|
@@ -81,6 +81,14 @@
 | Create expanse dialog | Saving goal dialog | deleting/Refund  goal Dialog |
 |:---:|:---:|:---:|
 | <img src="screenshots/Screenshot 2025-12-15 at 7.56.53 AM.png" width="250"> | <img src="screenshots/Screenshot 2025-12-15 at 7.57.10 AM.png" width="250"> | <img src="screenshots/Screenshot 2025-12-15 at 7.57.50 AM.png" width="250"> |
+
+| Dashboard | Todo List | Task Detailed |
+|:---:|:---:|:---:|
+| <img src="screenshots/Screenshot 2025-12-17 at 1.28.38 PM.png" width="250"> | <img src="screenshots/Screenshot 2025-12-17 at 1.29.25 PM.png" width="320"> | <img src="screenshots/Screenshot 2025-12-15 at 7.57.50 AM.png" width="250"> |
+
+| My notes | Note detailed | 
+|:---:|:---:|
+| <img src="screenshots/Screenshot 2025-12-17 at 1.29.36 PM.png" width="250"> | <img src="screenshots/Screenshot 2025-12-17 at 1.29.45 PM.png" width="250"> 
 
 ## 🛠 Tech Stack
 
