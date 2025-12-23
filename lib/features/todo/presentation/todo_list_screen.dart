@@ -6,12 +6,43 @@ import '../data/todo_repository.dart';
 import '../domain/task_group_model.dart';
 import 'add_edit_task_group_dialog.dart';
 import 'todo_tasks_screen.dart';
+
 class TodoListScreen extends ConsumerWidget {
   const TodoListScreen({super.key});
 
+  // Helper to group lists by date
+  Map<String, List<TaskGroupModel>> _groupGroupsByDate(List<TaskGroupModel> groups) {
+    final Map<String, List<TaskGroupModel>> grouped = {};
+    for (var group in groups) {
+      final dateKey = DateFormat('yyyy-MM-dd').format(group.createdAt);
+      if (!grouped.containsKey(dateKey)) {
+        grouped[dateKey] = [];
+      }
+      grouped[dateKey]!.add(group);
+    }
+    return grouped;
+  }
+
+  // Helper to get nice header text (Today, Yesterday, etc.)
+  String _getNiceHeader(String dateKey) {
+    final date = DateTime.parse(dateKey);
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = DateTime(now.year, now.month, now.day - 1);
+    final dateToCheck = DateTime(date.year, date.month, date.day);
+
+    if (dateToCheck == today) {
+      return "Today";
+    } else if (dateToCheck == yesterday) {
+      return "Yesterday";
+    } else {
+      return DateFormat('MMMM d, y').format(date);
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Watch Groups, NOT Todos
+    // Watch Groups
     final groupsAsync = ref.watch(taskGroupListProvider);
     final isDark = ref.watch(themeProvider);
 
@@ -56,12 +87,44 @@ class TodoListScreen extends ConsumerWidget {
             );
           }
 
+          // 1. Group the data
+          final groupedMap = _groupGroupsByDate(groups);
+          final dateKeys = groupedMap.keys.toList(); // keys are already sorted if incoming list is sorted by date
+
+          // 2. Build the list with headers
           return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: groups.length,
+            padding: const EdgeInsets.only(bottom: 80),
+            itemCount: dateKeys.length,
             itemBuilder: (context, index) {
-              final group = groups[index];
-              return _TaskGroupCard(group: group, isDark: isDark, ref: ref);
+              final dateKey = dateKeys[index];
+              final dayGroups = groupedMap[dateKey]!;
+              final headerText = _getNiceHeader(dateKey);
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Date Header
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
+                    child: Text(
+                      headerText.toUpperCase(),
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: subTextColor,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                  ),
+                  // List of Cards for this date
+                  ...dayGroups.map((group) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: _TaskGroupCard(group: group, isDark: isDark, ref: ref),
+                    );
+                  }),
+                ],
+              );
             },
           );
         },
@@ -87,7 +150,7 @@ class _TaskGroupCard extends StatelessWidget {
     final borderColor = isDark ? Colors.grey[800]! : Colors.grey[200]!;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
+      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: cardColor,
         borderRadius: BorderRadius.circular(16),
