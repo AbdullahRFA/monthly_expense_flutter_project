@@ -7,15 +7,23 @@ import '../domain/todo_model.dart';
 import 'add_edit_todo_dialog.dart';
 
 class TaskDetailScreen extends ConsumerWidget {
+  final String groupId; // REQUIRED
   final String todoId;
-  final TodoModel initialTodo; // Passed for smooth transition
+  final TodoModel initialTodo;
 
-  const TaskDetailScreen({super.key, required this.todoId, required this.initialTodo});
+  const TaskDetailScreen({
+    super.key,
+    required this.groupId,
+    required this.todoId,
+    required this.initialTodo
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final todoAsync = ref.watch(todoStreamProvider(todoId));
+    // We pass a tuple/record of arguments to the family provider
+    final todoAsync = ref.watch(singleTodoStreamProvider((groupId: groupId, todoId: todoId)));
     final isDark = ref.watch(themeProvider);
+
     final bgColor = isDark ? const Color(0xFF121212) : Colors.grey[50];
     final textColor = isDark ? Colors.white : Colors.black87;
     final cardColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
@@ -29,19 +37,18 @@ class TaskDetailScreen extends ConsumerWidget {
         iconTheme: IconThemeData(color: textColor),
         elevation: 0,
         actions: [
-          // EDIT BUTTON
+          // EDIT
           IconButton(
             icon: const Icon(Icons.edit_outlined),
             onPressed: () {
-              // We use the latest data from provider if available, else initial
               final currentTodo = todoAsync.value ?? initialTodo;
               showDialog(
                 context: context,
-                builder: (_) => AddEditTodoDialog(todoToEdit: currentTodo),
+                builder: (_) => AddEditTodoDialog(groupId: groupId, todoToEdit: currentTodo),
               );
             },
           ),
-          // DELETE BUTTON
+          // DELETE
           IconButton(
             icon: const Icon(Icons.delete_outline, color: Colors.red),
             onPressed: () {
@@ -184,7 +191,7 @@ class TaskDetailScreen extends ConsumerWidget {
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
           TextButton(
             onPressed: () {
-              ref.read(todoRepositoryProvider).deleteTodo(todoId);
+              ref.read(todoRepositoryProvider).deleteTodo(groupId, todoId);
               Navigator.pop(ctx); // Close Dialog
               Navigator.pop(context); // Close Screen
             },

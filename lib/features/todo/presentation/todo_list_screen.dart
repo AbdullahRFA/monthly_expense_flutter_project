@@ -3,17 +3,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../providers/theme_provider.dart';
 import '../data/todo_repository.dart';
-import '../domain/todo_model.dart';
-import 'add_edit_todo_dialog.dart';
-import 'task_detail_screen.dart'; // IMPORT THIS
-
+import '../domain/task_group_model.dart';
+import 'add_edit_task_group_dialog.dart';
+import 'todo_tasks_screen.dart';
 class TodoListScreen extends ConsumerWidget {
   const TodoListScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final todosAsync = ref.watch(todoListProvider);
+    // Watch Groups, NOT Todos
+    final groupsAsync = ref.watch(taskGroupListProvider);
     final isDark = ref.watch(themeProvider);
+
     final bgColor = isDark ? const Color(0xFF121212) : Colors.grey[50];
     final textColor = isDark ? Colors.white : Colors.black87;
     final subTextColor = isDark ? Colors.grey[400] : Colors.grey[600];
@@ -21,44 +22,46 @@ class TodoListScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: bgColor,
       appBar: AppBar(
-        title: Text("Tasks", style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
+        title: Text("My Lists", style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
         backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
         iconTheme: IconThemeData(color: textColor),
         elevation: 0,
       ),
       floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: Colors.teal,
+        backgroundColor: Colors.purple,
         foregroundColor: Colors.white,
-        icon: const Icon(Icons.add),
-        label: const Text("New Task"),
+        icon: const Icon(Icons.create_new_folder_outlined),
+        label: const Text("New List"),
         onPressed: () {
           showDialog(
             context: context,
-            builder: (_) => const AddEditTodoDialog(),
+            builder: (_) => const AddEditTaskGroupDialog(),
           );
         },
       ),
-      body: todosAsync.when(
-        data: (todos) {
-          if (todos.isEmpty) {
+      body: groupsAsync.when(
+        data: (groups) {
+          if (groups.isEmpty) {
             return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.check_circle_outline, size: 64, color: subTextColor),
+                  Icon(Icons.folder_open_rounded, size: 80, color: isDark ? Colors.grey[800] : Colors.grey[300]),
                   const SizedBox(height: 16),
-                  Text("No tasks yet!", style: TextStyle(color: textColor, fontSize: 18)),
+                  Text("No task lists yet", style: TextStyle(color: subTextColor, fontSize: 18)),
+                  const SizedBox(height: 8),
+                  Text("Create a folder to organize tasks", style: TextStyle(color: subTextColor, fontSize: 14)),
                 ],
               ),
             );
           }
-          return ListView.separated(
+
+          return ListView.builder(
             padding: const EdgeInsets.all(16),
-            itemCount: todos.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
+            itemCount: groups.length,
             itemBuilder: (context, index) {
-              final todo = todos[index];
-              return _TodoCard(todo: todo, isDark: isDark, ref: ref);
+              final group = groups[index];
+              return _TaskGroupCard(group: group, isDark: isDark, ref: ref);
             },
           );
         },
@@ -69,124 +72,158 @@ class TodoListScreen extends ConsumerWidget {
   }
 }
 
-class _TodoCard extends StatelessWidget {
-  final TodoModel todo;
+class _TaskGroupCard extends StatelessWidget {
+  final TaskGroupModel group;
   final bool isDark;
   final WidgetRef ref;
 
-  const _TodoCard({required this.todo, required this.isDark, required this.ref});
+  const _TaskGroupCard({required this.group, required this.isDark, required this.ref});
 
   @override
   Widget build(BuildContext context) {
     final cardColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
     final textColor = isDark ? Colors.white : Colors.black87;
     final subTextColor = isDark ? Colors.grey[400] : Colors.grey[600];
+    final borderColor = isDark ? Colors.grey[800]! : Colors.grey[200]!;
 
-    return Card(
-      color: cardColor,
-      elevation: 0,
-      margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: cardColor,
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: isDark ? Colors.grey[800]! : Colors.grey[200]!),
+        border: Border.all(color: borderColor),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4)),
+        ],
       ),
-      child: InkWell(
+      child: Material(
+        color: Colors.transparent,
         borderRadius: BorderRadius.circular(16),
-        // 2. NAVIGATE TO DETAIL SCREEN ON TAP
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => TaskDetailScreen(todoId: todo.id, initialTodo: todo),
-            ),
-          );
-        },
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Checkbox
-                  Transform.scale(
-                    scale: 1.2,
-                    child: Checkbox(
-                      value: todo.isCompleted,
-                      activeColor: todo.priorityColor,
-                      shape: const CircleBorder(),
-                      side: BorderSide(color: isDark ? Colors.grey : Colors.grey[400]!, width: 2),
-                      onChanged: (val) {
-                        ref.read(todoRepositoryProvider).toggleTodo(todo.id, todo.isCompleted);
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-
-                  // Text Content
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const SizedBox(height: 4),
-                        Text(
-                          todo.title,
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: textColor,
-                            decoration: todo.isCompleted ? TextDecoration.lineThrough : null,
-                            decorationColor: Colors.grey,
-                          ),
-                        ),
-                        if (todo.description.isNotEmpty) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            todo.description,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(fontSize: 13, color: subTextColor),
-                          ),
-                        ]
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-
-              // Metadata Row (Priority & Date)
-              Padding(
-                padding: const EdgeInsets.only(left: 52, top: 4),
-                child: Row(
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () {
+            // Navigate to the Tasks Screen
+            Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => TodoTasksScreen(groupId: group.id, groupTitle: group.title))
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: todo.priorityColor.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: todo.priorityColor.withOpacity(0.3)),
-                      ),
-                      child: Text(
-                        todo.priority.name.toUpperCase(),
-                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: todo.priorityColor),
+                    // Icon & Title
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: Colors.purple.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(Icons.list_alt_rounded, color: Colors.purple),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  group.title,
+                                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textColor),
+                                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                                ),
+                                if (group.description.isNotEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 4.0),
+                                    child: Text(
+                                      group.description,
+                                      style: TextStyle(fontSize: 13, color: subTextColor),
+                                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    if (todo.dueDate != null) ...[
-                      const SizedBox(width: 12),
-                      Icon(Icons.calendar_today_rounded, size: 14, color: subTextColor),
-                      const SizedBox(width: 4),
-                      Text(
-                        DateFormat('MMM d').format(todo.dueDate!),
-                        style: TextStyle(fontSize: 12, color: subTextColor, fontWeight: FontWeight.w500),
-                      ),
-                    ],
+                    // More Menu
+                    PopupMenuButton<String>(
+                      icon: Icon(Icons.more_vert, color: subTextColor),
+                      color: cardColor,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      onSelected: (value) {
+                        if (value == 'edit') {
+                          showDialog(context: context, builder: (_) => AddEditTaskGroupDialog(groupToEdit: group));
+                        } else if (value == 'delete') {
+                          _confirmDelete(context, ref, group.id);
+                        }
+                      },
+                      itemBuilder: (context) => [
+                        PopupMenuItem(value: 'edit', child: Text("Edit", style: TextStyle(color: textColor))),
+                        const PopupMenuItem(value: 'delete', child: Text("Delete", style: TextStyle(color: Colors.red))),
+                      ],
+                    )
                   ],
                 ),
-              )
-            ],
+                const SizedBox(height: 16),
+                Divider(height: 1, color: borderColor),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Icon(Icons.calendar_today_rounded, size: 14, color: subTextColor),
+                    const SizedBox(width: 6),
+                    Text(
+                      "Created on ${DateFormat('MMM d, y').format(group.createdAt)}",
+                      style: TextStyle(fontSize: 12, color: subTextColor),
+                    ),
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.grey[800] : Colors.grey[100],
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Row(
+                        children: [
+                          Text("Open", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.purple)),
+                          SizedBox(width: 4),
+                          Icon(Icons.arrow_forward_rounded, size: 14, color: Colors.purple)
+                        ],
+                      ),
+                    )
+                  ],
+                )
+              ],
+            ),
           ),
         ),
+      ),
+    );
+  }
+
+  void _confirmDelete(BuildContext context, WidgetRef ref, String groupId) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Delete List?"),
+        content: const Text("This will remove the list and all tasks inside it."),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
+          TextButton(
+              onPressed: () {
+                ref.read(todoRepositoryProvider).deleteTaskGroup(groupId);
+                Navigator.pop(ctx);
+              },
+              child: const Text("Delete", style: TextStyle(color: Colors.red))
+          ),
+        ],
       ),
     );
   }

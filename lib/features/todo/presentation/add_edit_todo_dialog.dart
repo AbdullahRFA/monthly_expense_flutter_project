@@ -6,8 +6,10 @@ import '../data/todo_repository.dart';
 import '../domain/todo_model.dart';
 
 class AddEditTodoDialog extends ConsumerStatefulWidget {
+  final String groupId; // REQUIRED
   final TodoModel? todoToEdit;
-  const AddEditTodoDialog({super.key, this.todoToEdit});
+
+  const AddEditTodoDialog({super.key, required this.groupId, this.todoToEdit});
 
   @override
   ConsumerState<AddEditTodoDialog> createState() => _AddEditTodoDialogState();
@@ -56,25 +58,26 @@ class _AddEditTodoDialogState extends ConsumerState<AddEditTodoDialog> {
 
     try {
       if (widget.todoToEdit == null) {
-        // Add
+        // Add (Uses groupId)
         await ref.read(todoRepositoryProvider).addTodo(
+          groupId: widget.groupId,
           title: _titleController.text.trim(),
           description: _descController.text.trim(),
           dueDate: _dueDate,
           priority: _priority,
         );
       } else {
-        // Edit
+        // Edit (Uses groupId)
         final updatedTodo = TodoModel(
           id: widget.todoToEdit!.id,
           title: _titleController.text.trim(),
           description: _descController.text.trim(),
           isCompleted: widget.todoToEdit!.isCompleted,
-          date: widget.todoToEdit!.date, // Keep creation date
+          date: widget.todoToEdit!.date,
           dueDate: _dueDate,
           priority: _priority,
         );
-        await ref.read(todoRepositoryProvider).updateTodo(updatedTodo);
+        await ref.read(todoRepositoryProvider).updateTodo(widget.groupId, updatedTodo);
       }
       if (mounted) Navigator.pop(context);
     } catch (e) {
@@ -128,7 +131,7 @@ class _AddEditTodoDialogState extends ConsumerState<AddEditTodoDialog> {
                 // Priority & Date Row
                 Row(
                   children: [
-                    // Priority Dropdown
+                    // Priority
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -155,7 +158,7 @@ class _AddEditTodoDialogState extends ConsumerState<AddEditTodoDialog> {
                       ),
                     ),
                     const SizedBox(width: 16),
-                    // Date Picker
+                    // Date
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
