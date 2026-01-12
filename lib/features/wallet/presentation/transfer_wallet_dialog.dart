@@ -87,9 +87,17 @@ class _TransferWalletDialogState extends ConsumerState<TransferWalletDialog> {
                       // Source
                       DropdownButtonFormField<String>(
                         value: _sourceWalletId,
+                        isExpanded: true, // FIX: Prevent overflow
                         dropdownColor: dialogBg,
                         decoration: InputDecoration(labelText: "From Wallet", filled: true, fillColor: inputFill),
-                        items: wallets.map((w) => DropdownMenuItem(value: w.id, child: Text("${w.name} (${CurrencyHelper.format(w.currentBalance)})", style: TextStyle(color: textColor)))).toList(),
+                        items: wallets.map((w) => DropdownMenuItem(
+                            value: w.id,
+                            child: Text(
+                              "${w.name} (${CurrencyHelper.format(w.currentBalance)})",
+                              style: TextStyle(color: textColor),
+                              overflow: TextOverflow.ellipsis, // FIX: Truncate text
+                            )
+                        )).toList(),
                         onChanged: (val) => setState(() => _sourceWalletId = val),
                         validator: (v) => v == null ? "Required" : null,
                       ),
@@ -97,11 +105,26 @@ class _TransferWalletDialogState extends ConsumerState<TransferWalletDialog> {
                       // Destination
                       DropdownButtonFormField<String>(
                         value: _destWalletId,
+                        isExpanded: true, // FIX: Prevent overflow
                         dropdownColor: dialogBg,
                         decoration: InputDecoration(labelText: "To Wallet", filled: true, fillColor: inputFill),
                         items: [
-                          ...wallets.map((w) => DropdownMenuItem(value: w.id, child: Text(w.name, style: TextStyle(color: textColor)))),
-                          DropdownMenuItem(value: "CREATE_NEW", child: Text("+ Create New Wallet", style: TextStyle(color: Colors.teal, fontWeight: FontWeight.bold)))
+                          ...wallets.map((w) => DropdownMenuItem(
+                              value: w.id,
+                              child: Text(
+                                w.name,
+                                style: TextStyle(color: textColor),
+                                overflow: TextOverflow.ellipsis, // FIX: Truncate text
+                              )
+                          )),
+                          DropdownMenuItem(
+                              value: "CREATE_NEW",
+                              child: Text(
+                                "+ Create New Wallet",
+                                style: TextStyle(color: Colors.teal, fontWeight: FontWeight.bold),
+                                overflow: TextOverflow.ellipsis,
+                              )
+                          )
                         ],
                         onChanged: (val) async {
                           if (val == "CREATE_NEW") {
